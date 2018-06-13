@@ -64,18 +64,22 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	const char *source_name = obs_data_get_string(settings, "source");
 
 	if (context->source_name){
-		obs_source_t *s = obs_get_source_by_name(context->source_name);
-		if(s){
-			context->source_filter = NULL;
-			obs_source_enum_filters(s, EnumFilter, data);
-			if(context->source_filter)
-			{
-				obs_source_filter_remove(s,context->source_filter);
+		if(strcmp(context->source_name, source_name) != 0){
+			obs_source_t *s = obs_get_source_by_name(context->source_name);
+			if(s){
+				do{
+					context->source_filter = NULL;
+					obs_source_enum_filters(s, EnumFilter, data);
+					if(context->source_filter)
+					{
+						obs_source_filter_remove(s,context->source_filter);
+					}
+				}while(context->source_filter);
+				obs_source_release(s);
 			}
-			obs_source_release(s);
+			bfree(context->source_name);
+			context->source_name = bstrdup(source_name);
 		}
-		bfree(context->source_name);
-		context->source_name = bstrdup(source_name);
 	}else{
 		context->source_name = bstrdup(source_name);
 	}
@@ -89,10 +93,17 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	obs_source_t *s = obs_get_source_by_name(context->source_name);
 	if(!s)
 		return;
-	
-	context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
-	if(context->source_filter){
-		obs_source_filter_add(s,context->source_filter);
+
+	context->source_filter = NULL;
+	obs_source_enum_filters(s, EnumFilter, data);
+	if(!context->source_filter)
+	{
+		context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
+		if(context->source_filter){
+			obs_source_filter_add(s,context->source_filter);
+		}
+	}else{
+		obs_source_update(context->source_filter,settings);
 	}
 
 	obs_source_release(s);
