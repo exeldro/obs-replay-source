@@ -18,18 +18,34 @@
 #define warn(format, ...) \
 	blog(LOG_WARNING, format, ##__VA_ARGS__)
 
+#define VISIBILITY_ACTION_RESTART 0
+#define VISIBILITY_ACTION_PAUSE 1
+#define VISIBILITY_ACTION_CONTINUE 2
+
+#define END_ACTION_HIDE 0
+#define END_ACTION_PAUSE 1
+#define END_ACTION_LOOP 2
+
 struct replay_source {
 	obs_source_t  *source;
 	obs_source_t  *source_filter;
 	char          *source_name;
 	long          duration;
 	int           speed_percent;
+	int           visibility_action;
+	int           end_action;
 	obs_hotkey_id replay_hotkey;
+	obs_hotkey_id restart_hotkey;
+	obs_hotkey_id pause_hotkey;
 	uint64_t      first_frame_timestamp;
 	uint64_t      start_timestamp;
 	uint64_t      last_frame_timestamp;
 	uint64_t      previous_frame_timestamp;
-	bool          loop;
+
+	bool          play;
+	bool          restart;
+	bool          active;
+	bool          end;
 	
 	/* contains struct obs_source_frame* */
 	struct circlebuf               video_frames;
@@ -85,7 +101,9 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	}
 
 	context->duration = obs_data_get_int(settings, "duration");
-	context->loop = obs_data_get_bool(settings, "loop");
+	context->visibility_action = obs_data_get_int(settings, "visibility_action");
+	context->end_action = obs_data_get_int(settings, "end_action");
+
 	context->speed_percent = obs_data_get_int(settings, "speed_percent");
 	if (context->speed_percent < 1 || context->speed_percent > 200)
 		context->speed_percent = 100;
@@ -112,7 +130,6 @@ static void replay_source_update(void *data, obs_data_t *settings)
 static void replay_source_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_int(settings,SETTING_DURATION,5);
-	obs_data_set_default_bool(settings,SETTING_LOOP,true);
 	obs_data_set_default_int(settings, "speed_percent", 100);
 }
 
@@ -125,6 +142,63 @@ static void replay_source_hide(void *data)
 {
 	struct replay_source *context = data;
 
+}
+
+static void replay_source_active(void *data)
+{
+	struct replay_source *context = data;
+	if(context->visibility_action == VISIBILITY_ACTION_PAUSE)
+	{
+		context->play = true;
+	}
+	else if(context->visibility_action == VISIBILITY_ACTION_RESTART)
+	{
+		context->play = true;
+		context->restart = true;
+	}
+	context->active = true;
+}
+
+static void replay_source_deactive(void *data)
+{
+	struct replay_source *context = data;
+	if(context->visibility_action == VISIBILITY_ACTION_PAUSE)
+	{
+		context->play = false;
+	}
+	else if(context->visibility_action == VISIBILITY_ACTION_RESTART)
+	{
+		context->play = false;
+		context->restart = true;
+	}
+	context->active = false;
+}
+
+static void replay_restart_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(pressed){
+		c->restart = true;
+		c->play = true;
+	}
+}
+
+static void replay_pause_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(pressed){
+		c->play = !c->play;
+	}
 }
 
 static void replay_hotkey(void *data, obs_hotkey_id id,
@@ -170,6 +244,10 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 				circlebuf_push_back(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
 			}
 			pthread_mutex_unlock(&parent->async_mutex);
+			if(c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->active)
+			{
+				c->play = true;
+			}
 		}
 	}
 	obs_source_release(s);
@@ -187,6 +265,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			"ReplaySource.Replay",
 			obs_module_text("Replay"),
 			replay_hotkey, context);
+	
+	context->restart_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Restart",
+			obs_module_text("Restart"),
+			replay_restart_hotkey, context);
+	
+	context->pause_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Pause",
+			obs_module_text("Pause"),
+			replay_pause_hotkey, context);
 
 	return context;
 }
@@ -219,48 +307,88 @@ static void replay_source_tick(void *data, float seconds)
 {
 	struct replay_source *context = data;
 
-	if(context->video_frames.size){
-		struct obs_source_frame *frame;
-		struct obs_source_frame *peek_frame;
+	if(!context->video_frames.size){
+		context->play = false;
+	}
+	if(!context->play)
+	{
+		if(context->end && context->end_action == END_ACTION_HIDE)
+		{
+			obs_source_output_video(context->source, NULL);
+		}
+		return;
+	}
+	context->end = false;
+	struct obs_source_frame *frame;
+	struct obs_source_frame *peek_frame;
+	circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
+	const uint64_t timestamp = obs_get_video_frame_time();
+	if(context->first_frame_timestamp == peek_frame->timestamp)
+	{
+		context->start_timestamp = timestamp;
+		context->restart = false;
+	}
+	else if(context->restart)
+	{
+		while(peek_frame->timestamp != context->first_frame_timestamp)
+		{
+			circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
+
+			struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
+			new_frame->refs = 1;
+			obs_source_frame_copy(new_frame, frame);
+			circlebuf_push_back(&context->video_frames, &new_frame, sizeof(struct obs_source_frame*));
+
+			circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
+		}
+		context->restart = false;
+		context->start_timestamp = timestamp;
+	}
+	if(context->last_frame_timestamp == peek_frame->timestamp)
+	{
+		if(context->end_action != END_ACTION_LOOP)
+		{
+			context->play = false;
+			context->end = true;
+		}
+	}
+	uint64_t video_duration = timestamp - context->start_timestamp;
+	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent ;
+	if(video_duration < source_duration)
+		return;
+
+	while(context->play && context->video_frames.size && video_duration >= source_duration){
+
+		if(context->last_frame_timestamp == peek_frame->timestamp)
+		{
+			if(context->end_action != END_ACTION_LOOP)
+			{
+				context->play = false;
+				context->end = true;
+			}
+		}
+		circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
+
+		struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
+		new_frame->refs = 1;
+		obs_source_frame_copy(new_frame, frame);
+		circlebuf_push_back(&context->video_frames, &new_frame, sizeof(struct obs_source_frame*));
+
 		circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
-		const uint64_t timestamp = obs_get_video_frame_time();
+		source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
 		if(context->first_frame_timestamp == peek_frame->timestamp)
 		{
 			context->start_timestamp = timestamp;
+			video_duration = timestamp - context->start_timestamp;
 		}
-		uint64_t video_duration = timestamp - context->start_timestamp;
-		uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent ;
-		if(video_duration < source_duration)
-			return;
-
-		while(context->video_frames.size && video_duration >= source_duration){
-
-			circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
-			if(context->loop){
-				struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
-				new_frame->refs = 1;
-				obs_source_frame_copy(new_frame, frame);
-				circlebuf_push_back(&context->video_frames, &new_frame, sizeof(struct obs_source_frame*));
-			}
-			circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
-			source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
-			if(context->first_frame_timestamp == peek_frame->timestamp)
-			{
-				context->start_timestamp = timestamp;
-				video_duration = timestamp - context->start_timestamp;
-			}
-		}
-		if(context->speed_percent != 100)
-		{
-			frame->timestamp = frame->timestamp * 100 / context->speed_percent;
-		}
-		context->previous_frame_timestamp = frame->timestamp;
-		obs_source_output_video(context->source, frame);
 	}
-	else
+	if(context->speed_percent != 100)
 	{
-		obs_source_output_video(context->source, NULL);
+		frame->timestamp = frame->timestamp * 100 / context->speed_percent;
 	}
+	context->previous_frame_timestamp = frame->timestamp;
+	obs_source_output_video(context->source, frame);
+
 }
 static bool EnumSources(void *data, obs_source_t *source)
 {
@@ -280,7 +408,19 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_enum_sources(EnumSources, prop);
 
 	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,1,200,1);
-	obs_properties_add_bool(props,SETTING_LOOP,TEXT_LOOP);
+
+	prop = obs_properties_add_list(props, "visibilty_action", "Visibility Action",
+			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(prop, "Restart", VISIBILITY_ACTION_RESTART);
+	obs_property_list_add_int(prop, "Pause", VISIBILITY_ACTION_PAUSE);
+	obs_property_list_add_int(prop, "Continue", VISIBILITY_ACTION_CONTINUE);
+
+	prop = obs_properties_add_list(props, "end_action", "End Action",
+			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(prop, "Hide", END_ACTION_HIDE);
+	obs_property_list_add_int(prop, "Pause", END_ACTION_PAUSE);
+	obs_property_list_add_int(prop, "Loop", END_ACTION_LOOP);
+
 	obs_properties_add_int_slider(props, "speed_percent",
 			obs_module_text("SpeedPercentage"), 1, 200, 1);
 
@@ -300,6 +440,8 @@ struct obs_source_info replay_source_info = {
 	.get_defaults   = replay_source_defaults,
 	.show           = replay_source_show,
 	.hide           = replay_source_hide,
+	.activate       = replay_source_active,
+	.deactivate     = replay_source_deactive,
 	.video_tick     = replay_source_tick,
 	.get_properties = replay_source_properties
 };
