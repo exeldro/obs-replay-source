@@ -21,6 +21,7 @@
 #define VISIBILITY_ACTION_RESTART 0
 #define VISIBILITY_ACTION_PAUSE 1
 #define VISIBILITY_ACTION_CONTINUE 2
+#define VISIBILITY_ACTION_NONE 3
 
 #define END_ACTION_HIDE 0
 #define END_ACTION_PAUSE 1
@@ -100,11 +101,11 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		context->source_name = bstrdup(source_name);
 	}
 
-	context->duration = obs_data_get_int(settings, "duration");
-	context->visibility_action = obs_data_get_int(settings, "visibility_action");
-	context->end_action = obs_data_get_int(settings, "end_action");
+	context->duration = (long)obs_data_get_int(settings, "duration");
+	context->visibility_action = (int)obs_data_get_int(settings, "visibility_action");
+	context->end_action = (int)obs_data_get_int(settings, "end_action");
 
-	context->speed_percent = obs_data_get_int(settings, "speed_percent");
+	context->speed_percent = (int)obs_data_get_int(settings, "speed_percent");
 	if (context->speed_percent < 1 || context->speed_percent > 200)
 		context->speed_percent = 100;
 
@@ -147,7 +148,7 @@ static void replay_source_hide(void *data)
 static void replay_source_active(void *data)
 {
 	struct replay_source *context = data;
-	if(context->visibility_action == VISIBILITY_ACTION_PAUSE)
+	if(context->visibility_action == VISIBILITY_ACTION_PAUSE || context->visibility_action == VISIBILITY_ACTION_CONTINUE)
 	{
 		context->play = true;
 	}
@@ -229,7 +230,10 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 			while (c->video_frames.size) {
 				circlebuf_pop_front(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
 				//obs_source_release_frame(c->source, frame);
-				os_atomic_dec_long(&frame->refs);
+				if (os_atomic_dec_long(&frame->refs) <= 0) {
+					obs_source_frame_destroy(frame);
+					frame = NULL;
+				}
 			}
 			c->start_timestamp = obs_get_video_frame_time();
 			if(d->video_frames.size){
@@ -244,7 +248,7 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 				circlebuf_push_back(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
 			}
 			pthread_mutex_unlock(&parent->async_mutex);
-			if(c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->active)
+			if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
 			{
 				c->play = true;
 			}
@@ -319,8 +323,8 @@ static void replay_source_tick(void *data, float seconds)
 		return;
 	}
 	context->end = false;
-	struct obs_source_frame *frame;
-	struct obs_source_frame *peek_frame;
+	struct obs_source_frame *frame = NULL;
+	struct obs_source_frame *peek_frame = NULL;
 	circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
 	const uint64_t timestamp = obs_get_video_frame_time();
 	if(context->first_frame_timestamp == peek_frame->timestamp)
@@ -343,14 +347,6 @@ static void replay_source_tick(void *data, float seconds)
 		}
 		context->restart = false;
 		context->start_timestamp = timestamp;
-	}
-	if(context->last_frame_timestamp == peek_frame->timestamp)
-	{
-		if(context->end_action != END_ACTION_LOOP)
-		{
-			context->play = false;
-			context->end = true;
-		}
 	}
 	uint64_t video_duration = timestamp - context->start_timestamp;
 	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent ;
@@ -382,17 +378,18 @@ static void replay_source_tick(void *data, float seconds)
 			video_duration = timestamp - context->start_timestamp;
 		}
 	}
-	if(context->speed_percent != 100)
-	{
-		frame->timestamp = frame->timestamp * 100 / context->speed_percent;
+	if(frame){
+		if(context->speed_percent != 100)
+		{
+			frame->timestamp = frame->timestamp * 100 / context->speed_percent;
+		}
+		context->previous_frame_timestamp = frame->timestamp;
+		obs_source_output_video(context->source, frame);
 	}
-	context->previous_frame_timestamp = frame->timestamp;
-	obs_source_output_video(context->source, frame);
-
 }
 static bool EnumSources(void *data, obs_source_t *source)
 {
-	obs_properties_t *prop = data;
+	obs_property_t *prop = data;
 	if((source->info.output_flags | OBS_SOURCE_ASYNC) != 0)
 		obs_property_list_add_string(prop,obs_source_get_name(source),obs_source_get_name(source));
 	return true;
@@ -404,16 +401,17 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	obs_properties_t *props = obs_properties_create();
 	//obs_properties_add_text(props,"source","Source",OBS_TEXT_DEFAULT);
-	obs_properties_t* prop = obs_properties_add_list(props,SETTING_SOURCE,TEXT_SOURCE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_t* prop = obs_properties_add_list(props,SETTING_SOURCE,TEXT_SOURCE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumSources, prop);
 
 	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,1,200,1);
 
-	prop = obs_properties_add_list(props, "visibilty_action", "Visibility Action",
+	prop = obs_properties_add_list(props, "visibility_action", "Visibility Action",
 			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(prop, "Restart", VISIBILITY_ACTION_RESTART);
 	obs_property_list_add_int(prop, "Pause", VISIBILITY_ACTION_PAUSE);
 	obs_property_list_add_int(prop, "Continue", VISIBILITY_ACTION_CONTINUE);
+	obs_property_list_add_int(prop, "None", VISIBILITY_ACTION_NONE);
 
 	prop = obs_properties_add_list(props, "end_action", "End Action",
 			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
