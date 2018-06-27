@@ -42,6 +42,7 @@ struct replay_source {
 	uint64_t      start_timestamp;
 	uint64_t      last_frame_timestamp;
 	uint64_t      previous_frame_timestamp;
+	uint64_t      pause_timestamp;
 
 	bool          play;
 	bool          restart;
@@ -150,7 +151,13 @@ static void replay_source_active(void *data)
 	struct replay_source *context = data;
 	if(context->visibility_action == VISIBILITY_ACTION_PAUSE || context->visibility_action == VISIBILITY_ACTION_CONTINUE)
 	{
-		context->play = true;
+		if(!context->play){
+			context->play = true;
+			if(context->pause_timestamp)
+			{
+				context->start_timestamp += obs_get_video_frame_time() - context->pause_timestamp;
+			}
+		}
 	}
 	else if(context->visibility_action == VISIBILITY_ACTION_RESTART)
 	{
@@ -165,7 +172,10 @@ static void replay_source_deactive(void *data)
 	struct replay_source *context = data;
 	if(context->visibility_action == VISIBILITY_ACTION_PAUSE)
 	{
-		context->play = false;
+		if(context->play){
+			context->play = false;
+			context->pause_timestamp = obs_get_video_frame_time();
+		}
 	}
 	else if(context->visibility_action == VISIBILITY_ACTION_RESTART)
 	{
@@ -198,27 +208,30 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 	struct replay_source *c = data;
 
 	if(pressed){
-		c->play = !c->play;
+		if(c->play)
+		{
+			c->play = false;
+			c->pause_timestamp = obs_get_video_frame_time();
+		}else
+		{
+			c->play = true;
+			if(c->pause_timestamp)
+			{
+				c->start_timestamp += obs_get_video_frame_time() - c->pause_timestamp;
+			}
+		}
 	}
 }
 
-static void replay_hotkey(void *data, obs_hotkey_id id,
-		obs_hotkey_t *hotkey, bool pressed)
+static void replay_retrive(struct replay_source *c)
 {
-	UNUSED_PARAMETER(id);
-	UNUSED_PARAMETER(hotkey);
-
-	struct replay_source *c = data;
-
-	if(!pressed || !c->source_name)
-		return;
 
 	obs_source_t *s = obs_get_source_by_name(c->source_name);
 	if(!s)
 		return;
 	
 	c->source_filter = NULL;
-	obs_source_enum_filters(s, EnumFilter, data);
+	obs_source_enum_filters(s, EnumFilter, c);
 	if(c->source_filter)
 	{
 		struct replay_filter* d = c->source_filter->context.data;
@@ -236,6 +249,7 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 				}
 			}
 			c->start_timestamp = obs_get_video_frame_time();
+			c->pause_timestamp = 0;
 			if(d->video_frames.size){
 				circlebuf_peek_front(&d->video_frames, &frame, sizeof(struct obs_source_frame*));
 				c->first_frame_timestamp = frame->timestamp;
@@ -255,6 +269,19 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 		}
 	}
 	obs_source_release(s);
+}
+
+static void replay_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+	if(!pressed || !c->source_name)
+		return;
+
+	replay_retrive(c);
 }
 
 
@@ -330,6 +357,7 @@ static void replay_source_tick(void *data, float seconds)
 	if(context->first_frame_timestamp == peek_frame->timestamp)
 	{
 		context->start_timestamp = timestamp;
+		context->pause_timestamp = 0;
 		context->restart = false;
 	}
 	else if(context->restart)
@@ -347,6 +375,7 @@ static void replay_source_tick(void *data, float seconds)
 		}
 		context->restart = false;
 		context->start_timestamp = timestamp;
+		context->pause_timestamp = 0;
 	}
 	uint64_t video_duration = timestamp - context->start_timestamp;
 	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent ;
@@ -375,6 +404,7 @@ static void replay_source_tick(void *data, float seconds)
 		if(context->first_frame_timestamp == peek_frame->timestamp)
 		{
 			context->start_timestamp = timestamp;
+			context->pause_timestamp = 0;
 			video_duration = timestamp - context->start_timestamp;
 		}
 	}
@@ -393,6 +423,13 @@ static bool EnumSources(void *data, obs_source_t *source)
 	if((source->info.output_flags | OBS_SOURCE_ASYNC) != 0)
 		obs_property_list_add_string(prop,obs_source_get_name(source),obs_source_get_name(source));
 	return true;
+}
+
+static bool replay_button(obs_properties_t *props, obs_property_t *property, void *data)
+{
+	struct replay_source *s = data;
+	replay_retrive(s);
+	return false; // no properties changed
 }
 
 static obs_properties_t *replay_source_properties(void *data)
@@ -421,6 +458,8 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	obs_properties_add_int_slider(props, "speed_percent",
 			obs_module_text("SpeedPercentage"), 1, 200, 1);
+
+	obs_properties_add_button(props,"replay_button","Get replay", replay_button);
 
 	return props;
 }
