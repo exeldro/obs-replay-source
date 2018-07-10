@@ -366,10 +366,7 @@ static void replay_source_tick(void *data, float seconds)
 		{
 			circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
 
-			struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
-			new_frame->refs = 1;
-			obs_source_frame_copy(new_frame, frame);
-			circlebuf_push_back(&context->video_frames, &new_frame, sizeof(struct obs_source_frame*));
+			circlebuf_push_back(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
 
 			circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
 		}
@@ -382,7 +379,7 @@ static void replay_source_tick(void *data, float seconds)
 	if(video_duration < source_duration)
 		return;
 
-	while(context->play && context->video_frames.size && video_duration >= source_duration){
+	while(context->play && context->video_frames.size && video_duration >= source_duration && (frame == NULL || frame->timestamp <= peek_frame->timestamp)){
 
 		if(context->last_frame_timestamp == peek_frame->timestamp)
 		{
@@ -394,27 +391,20 @@ static void replay_source_tick(void *data, float seconds)
 		}
 		circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
 
-		struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
-		new_frame->refs = 1;
-		obs_source_frame_copy(new_frame, frame);
-		circlebuf_push_back(&context->video_frames, &new_frame, sizeof(struct obs_source_frame*));
+		circlebuf_push_back(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
 
 		circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
 		source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
-		if(context->first_frame_timestamp == peek_frame->timestamp)
-		{
-			context->start_timestamp = timestamp;
-			context->pause_timestamp = 0;
-			video_duration = timestamp - context->start_timestamp;
-		}
 	}
 	if(frame){
+		uint64_t t = frame->timestamp;
 		if(context->speed_percent != 100)
 		{
 			frame->timestamp = frame->timestamp * 100 / context->speed_percent;
 		}
 		context->previous_frame_timestamp = frame->timestamp;
 		obs_source_output_video(context->source, frame);
+		frame->timestamp = t;
 	}
 }
 static bool EnumSources(void *data, obs_source_t *source)
