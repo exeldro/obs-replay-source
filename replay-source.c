@@ -38,6 +38,10 @@ struct replay_source {
 	obs_hotkey_id replay_hotkey;
 	obs_hotkey_id restart_hotkey;
 	obs_hotkey_id pause_hotkey;
+	obs_hotkey_id faster_hotkey;
+	obs_hotkey_id slower_hotkey;
+	obs_hotkey_id normal_speed_hotkey;
+	obs_hotkey_id half_speed_hotkey;
 	uint64_t      first_frame_timestamp;
 	uint64_t      start_timestamp;
 	uint64_t      last_frame_timestamp;
@@ -284,6 +288,80 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 	replay_retrive(c);
 }
 
+void update_speed(struct replay_source *c, int new_speed)
+{
+	if(new_speed < 1)
+		new_speed = 1;
+
+	if(new_speed == c->speed_percent)
+		return;
+	if(c->video_frames.size)
+	{
+		struct obs_source_frame *peek_frame = NULL;
+		circlebuf_peek_front(&c->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
+		const uint64_t duration = peek_frame->timestamp - c->first_frame_timestamp;
+		const uint64_t old_duration = duration * 100 / c->speed_percent;
+		const uint64_t new_duration = duration * 100 / new_speed;
+		c->start_timestamp += old_duration - new_duration;
+	}
+	c->speed_percent = new_speed;
+}
+
+static void replay_faster_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+
+	update_speed(c, c->speed_percent*3/2);
+}
+
+static void replay_slower_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+
+	update_speed(c, c->speed_percent*2/3);
+}
+
+static void replay_normal_speed_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+
+	update_speed(c, 100);
+}
+
+static void replay_half_speed_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+
+	update_speed(c, 50);
+}
 
 static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -306,6 +384,26 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			"ReplaySource.Pause",
 			obs_module_text("Pause"),
 			replay_pause_hotkey, context);
+
+	context->faster_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Faster",
+			obs_module_text("Faster"),
+			replay_faster_hotkey, context);
+
+	context->slower_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Slower",
+			obs_module_text("Slower"),
+			replay_slower_hotkey, context);
+
+	context->normal_speed_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.NormalSpeed",
+			obs_module_text("Normal speed"),
+			replay_normal_speed_hotkey, context);
+
+	context->half_speed_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.HalfSpeed",
+			obs_module_text("Half speed"),
+			replay_half_speed_hotkey, context);
 
 	return context;
 }
@@ -398,10 +496,12 @@ static void replay_source_tick(void *data, float seconds)
 	}
 	if(frame){
 		uint64_t t = frame->timestamp;
+		frame->timestamp -= context->first_frame_timestamp;
 		if(context->speed_percent != 100)
 		{
 			frame->timestamp = frame->timestamp * 100 / context->speed_percent;
 		}
+		frame->timestamp += context->start_timestamp;
 		context->previous_frame_timestamp = frame->timestamp;
 		obs_source_output_video(context->source, frame);
 		frame->timestamp = t;
