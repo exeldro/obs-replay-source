@@ -47,6 +47,8 @@ struct replay_source {
 	uint64_t      last_frame_timestamp;
 	uint64_t      previous_frame_timestamp;
 	uint64_t      pause_timestamp;
+	
+	struct obs_source_audio audio;
 
 	bool          play;
 	bool          restart;
@@ -241,16 +243,23 @@ static void replay_retrive(struct replay_source *c)
 		struct replay_filter* d = c->source_filter->context.data;
 		if(d)
 		{
+			struct obs_audio_info info;
+			obs_get_audio_info(&info);
 			obs_source_t *parent = obs_filter_get_parent(d->src);
 			pthread_mutex_lock(&parent->async_mutex);
 			struct obs_source_frame *frame;
 			while (c->video_frames.size) {
 				circlebuf_pop_front(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
-				//obs_source_release_frame(c->source, frame);
 				if (os_atomic_dec_long(&frame->refs) <= 0) {
 					obs_source_frame_destroy(frame);
 					frame = NULL;
 				}
+			}
+			while (c->audio_frames.size) {
+				struct obs_audio_data audio;
+				circlebuf_pop_front(&c->audio_frames, &audio,
+				sizeof(struct obs_audio_data));
+				free_audio_packet(&audio);
 			}
 			c->start_timestamp = obs_get_video_frame_time();
 			c->pause_timestamp = 0;
@@ -264,6 +273,31 @@ static void replay_retrive(struct replay_source *c)
 				os_atomic_inc_long(&frame->refs);
 				c->last_frame_timestamp = frame->timestamp;
 				circlebuf_push_back(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
+			}
+			while (d->audio_frames.size) {
+				struct obs_audio_data audio;
+				struct obs_audio_data cached;
+				circlebuf_pop_front(&d->audio_frames, &audio, sizeof(struct obs_audio_data));
+				const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, audio.frames);
+				const uint64_t end_timestamp = audio.timestamp + duration;
+				//todo cut audio to size
+				if(end_timestamp < c->first_frame_timestamp /*|| end_timestamp > c->last_frame_timestamp*/)
+				{
+					
+				}else if(audio.timestamp <= c->last_frame_timestamp){
+					memcpy(&cached, &audio, sizeof(cached));
+					if(end_timestamp > c->last_frame_timestamp)
+					{
+						cached.frames = ns_to_audio_frames(info.samples_per_sec, c->last_frame_timestamp - audio.timestamp);
+					}
+					for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+						if (!audio.data[i])
+							break;
+
+						cached.data[i] = bmemdup(audio.data[i], cached.frames * sizeof(float));
+					}
+					circlebuf_push_back(&c->audio_frames, &cached, sizeof(struct obs_audio_data));
+				}
 			}
 			pthread_mutex_unlock(&parent->async_mutex);
 			if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
@@ -444,6 +478,7 @@ static void replay_source_tick(void *data, float seconds)
 		if(context->end && context->end_action == END_ACTION_HIDE)
 		{
 			obs_source_output_video(context->source, NULL);
+			//obs_source_output_audio(context->source, NULL);
 		}
 		return;
 	}
@@ -471,9 +506,61 @@ static void replay_source_tick(void *data, float seconds)
 		context->restart = false;
 		context->start_timestamp = timestamp;
 		context->pause_timestamp = 0;
+		if(context->audio_frames.size)
+		{
+			struct obs_audio_data peek_audio;
+			circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+			while (peek_audio.timestamp > context->first_frame_timestamp)
+			{
+				circlebuf_pop_front(&context->audio_frames, NULL, sizeof(peek_audio));
+				circlebuf_push_back(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+				circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+			}
+		}
 	}
 	uint64_t video_duration = timestamp - context->start_timestamp;
-	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent ;
+	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
+	if(context->audio_frames.size){
+		struct obs_audio_data peek_audio;
+		
+		circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+		uint64_t previous = 0;
+		struct obs_audio_info info;
+		obs_get_audio_info(&info);
+		const uint64_t frame_duration = (context->last_frame_timestamp - context->first_frame_timestamp)/context->video_frames.size*2;
+		const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, peek_audio.frames);
+		uint64_t audio_duration = (peek_audio.timestamp - context->first_frame_timestamp + duration) * 100 / context->speed_percent;
+		while(context->play && context->audio_frames.size && video_duration + frame_duration >= audio_duration && peek_audio.timestamp > previous)
+		{
+			previous = peek_audio.timestamp;
+			circlebuf_pop_front(&context->audio_frames, NULL, sizeof(peek_audio));
+			circlebuf_push_back(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+
+			context->audio.frames = peek_audio.frames;
+
+			if(context->speed_percent != 100)
+			{
+				context->audio.timestamp = context->start_timestamp + (peek_audio.timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
+				context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100;
+			}else
+			{
+				context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->first_frame_timestamp;
+				context->audio.samples_per_sec = info.samples_per_sec;
+			}
+			for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+				context->audio.data[i] = peek_audio.data[i];
+			}
+
+
+			context->audio.speakers = info.speakers;
+			context->audio.format = AUDIO_FORMAT_FLOAT_PLANAR;
+
+			obs_source_output_audio(context->source, &context->audio);
+			circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+			audio_duration = (peek_audio.timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
+		}
+	}
+
 	if(video_duration < source_duration)
 		return;
 
@@ -558,7 +645,7 @@ struct obs_source_info replay_source_info = {
 	.id             = REPLAY_SOURCE_ID,
 	.type           = OBS_SOURCE_TYPE_INPUT,
 	.output_flags = OBS_SOURCE_ASYNC_VIDEO |
-//	                OBS_SOURCE_AUDIO |
+	                OBS_SOURCE_AUDIO |
 	                OBS_SOURCE_DO_NOT_DUPLICATE,
 	.get_name       = replay_source_get_name,
 	.create         = replay_source_create,

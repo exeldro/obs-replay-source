@@ -125,3 +125,10 @@ bool obs_module_load(void)
 	return true;
 }
 
+void free_audio_packet(struct obs_audio_data *audio)
+{
+	for (size_t i = 0; i < MAX_AV_PLANES; i++)
+		bfree(audio->data[i]);
+	memset(audio, 0, sizeof(*audio));
+}
+

@@ -2,10 +2,7 @@
 #include <util/circlebuf.h>
 #include <util/threading.h>
 #include "replay.h"
-
-#ifndef SEC_TO_NSEC
-#define SEC_TO_NSEC 1000000000ULL
-#endif
+#include "obs-internal.h"
 
 static void free_video_data(struct replay_filter *filter,
 		obs_source_t *parent)
@@ -21,13 +18,6 @@ static void free_video_data(struct replay_filter *filter,
 			frame = NULL;
 		}
 	}
-}
-
-static inline void free_audio_packet(struct obs_audio_data *audio)
-{
-	for (size_t i = 0; i < MAX_AV_PLANES; i++)
-		bfree(audio->data[i]);
-	memset(audio, 0, sizeof(*audio));
 }
 
 static void free_audio_data(struct replay_filter *filter)
@@ -67,12 +57,9 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 	UNUSED_PARAMETER(source);
 
 	struct replay_filter *context = bzalloc(sizeof(struct replay_filter));
-	struct obs_audio_info oai;
 	context->src = source;
 
 	replay_filter_update(context, settings);
-	obs_get_audio_info(&oai);
-	context->samplerate = oai.samples_per_sec;
 
 	return context;
 }
@@ -117,6 +104,7 @@ static struct obs_source_frame *replay_filter_video(void *data,
 
 	if (filter->reset_video) {
 		free_video_data(filter, parent);
+		free_audio_data(filter);
 		filter->reset_video = false;
 	}
 
@@ -145,11 +133,35 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	}
 	return frame;
 }
+
 static struct obs_audio_data *replay_filter_audio(void *data,
 		struct obs_audio_data *audio)
 {
 	struct replay_filter *filter = data;
 	struct obs_audio_data cached = *audio;
+	uint64_t cur_duration;
+
+	for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+		if (!audio->data[i])
+			break;
+
+		cached.data[i] = bmemdup(audio->data[i],
+				audio->frames * sizeof(float));
+	}
+
+	circlebuf_push_back(&filter->audio_frames, &cached, sizeof(cached));
+	
+	circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
+
+	cur_duration = audio->timestamp - cached.timestamp;
+	if (cur_duration >= filter->duration + MAX_TS_VAR){
+
+		circlebuf_pop_front(&filter->audio_frames, NULL, sizeof(cached));
+
+		free_audio_packet(&cached);
+	}
+
+
 	return audio;
 	return NULL;
 	return &filter->audio_output;
@@ -159,7 +171,7 @@ static struct obs_audio_data *replay_filter_audio(void *data,
 struct obs_source_info replay_filter_info = {
 	.id             = REPLAY_FILTER_ID,
 	.type           = OBS_SOURCE_TYPE_FILTER,
-	.output_flags   = OBS_SOURCE_VIDEO | OBS_SOURCE_ASYNC,
+	.output_flags   = OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO | OBS_SOURCE_ASYNC,
 	.create         = replay_filter_create,
 	.destroy        = replay_filter_destroy,
 	.update         = replay_filter_update,
@@ -167,5 +179,5 @@ struct obs_source_info replay_filter_info = {
 	.get_properties = replay_filter_properties,
 	.filter_video   = replay_filter_video,
 	.filter_audio   = replay_filter_audio,
-	.filter_remove  = replay_filter_remove
+	.filter_remove  = replay_filter_remove,
 };
