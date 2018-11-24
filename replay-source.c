@@ -3,7 +3,7 @@
 #include <util/platform.h>
 #include <util/dstr.h>
 #include <util/threading.h>
-#include <sys/stat.h>
+#include <../UI/obs-frontend-api/obs-frontend-api.h>
 #include <obs-scene.h>
 #include "replay.h"
 
@@ -35,6 +35,7 @@ struct replay_source {
 	int           speed_percent;
 	int           visibility_action;
 	int           end_action;
+	char          *next_scene_name;
 	obs_hotkey_id replay_hotkey;
 	obs_hotkey_id restart_hotkey;
 	obs_hotkey_id pause_hotkey;
@@ -106,6 +107,15 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		}
 	}else{
 		context->source_name = bstrdup(source_name);
+	}
+	const char *next_scene_name = obs_data_get_string(settings, "next_scene");
+	if (context->next_scene_name){
+		if(strcmp(context->next_scene_name, next_scene_name) != 0){
+			bfree(context->next_scene_name);
+			context->next_scene_name = bstrdup(next_scene_name);
+		}
+	}else{
+		context->next_scene_name = bstrdup(next_scene_name);
 	}
 
 	context->duration = (long)obs_data_get_int(settings, "duration");
@@ -245,8 +255,6 @@ static void replay_retrive(struct replay_source *c)
 		{
 			struct obs_audio_info info;
 			obs_get_audio_info(&info);
-			obs_source_t *parent = obs_filter_get_parent(d->src);
-			pthread_mutex_lock(&parent->async_mutex);
 			struct obs_source_frame *frame;
 			while (c->video_frames.size) {
 				circlebuf_pop_front(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
@@ -270,7 +278,6 @@ static void replay_retrive(struct replay_source *c)
 			}
 			while (d->video_frames.size) {
 				circlebuf_pop_front(&d->video_frames, &frame, sizeof(struct obs_source_frame*));
-				os_atomic_inc_long(&frame->refs);
 				c->last_frame_timestamp = frame->timestamp;
 				circlebuf_push_back(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
 			}
@@ -299,7 +306,6 @@ static void replay_retrive(struct replay_source *c)
 					circlebuf_push_back(&c->audio_frames, &cached, sizeof(struct obs_audio_data));
 				}
 			}
-			pthread_mutex_unlock(&parent->async_mutex);
 			if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
 			{
 				c->play = true;
@@ -449,6 +455,9 @@ static void replay_source_destroy(void *data)
 	if (context->source_name)
 		bfree(context->source_name);
 
+	if (context->next_scene_name)
+		bfree(context->next_scene_name);
+
 	while (context->video_frames.size) {
 		struct obs_source_frame *frame;
 
@@ -573,6 +582,15 @@ static void replay_source_tick(void *data, float seconds)
 				context->play = false;
 				context->end = true;
 			}
+			if(context->next_scene_name && context->active)
+			{
+				obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
+				if(s)
+				{
+					obs_frontend_set_current_scene(s);
+					obs_source_release(s);
+				}
+			}
 		}
 		circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
 
@@ -601,7 +619,13 @@ static bool EnumSources(void *data, obs_source_t *source)
 		obs_property_list_add_string(prop,obs_source_get_name(source),obs_source_get_name(source));
 	return true;
 }
-
+static bool EnumScenes(void *data, obs_source_t *source)
+{
+	obs_property_t *prop = data;
+	if(source->info.type == OBS_SOURCE_TYPE_SCENE)
+		obs_property_list_add_string(prop,obs_source_get_name(source),obs_source_get_name(source));
+	return true;
+}
 static bool replay_button(obs_properties_t *props, obs_property_t *property, void *data)
 {
 	struct replay_source *s = data;
@@ -632,6 +656,9 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_list_add_int(prop, "Hide", END_ACTION_HIDE);
 	obs_property_list_add_int(prop, "Pause", END_ACTION_PAUSE);
 	obs_property_list_add_int(prop, "Loop", END_ACTION_LOOP);
+
+	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_int_slider(props, "speed_percent",
 			obs_module_text("SpeedPercentage"), 1, 200, 1);

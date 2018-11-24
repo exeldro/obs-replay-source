@@ -29,6 +29,8 @@ void free_audio_packet(struct obs_audio_data *audio);
 #define TEXT_LOOP                      obs_module_text("Loop")
 #define SETTING_SOURCE                 "source"
 #define TEXT_SOURCE                    obs_module_text("Source")
+#define SETTING_NEXT_SCENE             "next_scene"
+#define TEXT_NEXT_SCENE                obs_module_text("NextScene")
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL
