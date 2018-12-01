@@ -116,12 +116,14 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("replay-source", "en-US")
 
 extern struct obs_source_info replay_filter_info;
+extern struct obs_source_info replay_filter_async_info;
 extern struct obs_source_info replay_source_info;
 
 bool obs_module_load(void)
 {
 	obs_register_source(&replay_source_info);
 	obs_register_source(&replay_filter_info);
+	obs_register_source(&replay_filter_async_info);
 	return true;
 }
 

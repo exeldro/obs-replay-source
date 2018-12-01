@@ -10,7 +10,8 @@ set(replay-source_HEADERS
 set(replay-source_SOURCES
 	replay.c
 	replay-source.c
-	replay-filter.c)
+	replay-filter.c
+	replay-filter-async.c)
 
 add_library(replay-source MODULE
 	${replay-source_HEADERS}

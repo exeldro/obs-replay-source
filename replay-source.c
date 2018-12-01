@@ -77,7 +77,7 @@ static void EnumFilter(obs_source_t *source, obs_source_t *filter, void *data)
 	const char *filterName = obs_source_get_name(filter);
 	const char *sourceName = obs_source_get_name(c->source);
 	const char *id = obs_source_get_id(filter);
-	if (strcmp("replay_filter", id) == 0 && strcmp(filterName, sourceName) == 0)
+	if ((strcmp(REPLAY_FILTER_ASYNC_ID, id) == 0 || strcmp(REPLAY_FILTER_ID, id) == 0) && strcmp(filterName, sourceName) == 0)
 		c->source_filter = filter;
 
 }
@@ -134,7 +134,14 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	obs_source_enum_filters(s, EnumFilter, data);
 	if(!context->source_filter)
 	{
-		context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
+		if((obs_source_get_output_flags(s) & OBS_SOURCE_ASYNC) == OBS_SOURCE_ASYNC)
+		{
+			context->source_filter = obs_source_create_private(REPLAY_FILTER_ASYNC_ID,obs_source_get_name(context->source), settings);
+		}
+		else
+		{
+			context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
+		}
 		if(context->source_filter){
 			obs_source_filter_add(s,context->source_filter);
 		}
@@ -658,7 +665,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_list_add_int(prop, "Loop", END_ACTION_LOOP);
 
 	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
-	obs_enum_scenes(EnumScenes, prop);
+	//obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_int_slider(props, "speed_percent",
 			obs_module_text("SpeedPercentage"), 1, 200, 1);

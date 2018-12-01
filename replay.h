@@ -11,6 +11,19 @@ struct replay_filter {
 	struct circlebuf               audio_frames;
 	struct obs_audio_data          audio_output;
 
+	struct obs_video_info ovi;
+	struct obs_audio_info oai;
+
+	gs_texrender_t* texrender;
+	gs_stagesurf_t* stagesurface;
+
+	uint32_t known_width;
+	uint32_t known_height;
+
+	uint8_t* video_data;
+	uint32_t video_linesize;
+	video_t* video_output;
+
 	uint64_t                       duration;
 	bool                           reset_video;
 	bool                           reset_audio;
@@ -22,6 +35,8 @@ void free_audio_packet(struct obs_audio_data *audio);
 
 #define REPLAY_FILTER_ID               "replay_filter"
 #define TEXT_FILTER_NAME               obs_module_text("ReplayFilter")
+#define REPLAY_FILTER_ASYNC_ID         "replay_filter_async"
+#define TEXT_FILTER_ASYNC_NAME         obs_module_text("ReplayFilterAsync")
 #define REPLAY_SOURCE_ID               "replay_source"
 #define SETTING_DURATION               "duration"
 #define TEXT_DURATION                  obs_module_text("Duration")
