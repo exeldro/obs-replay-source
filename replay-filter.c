@@ -88,15 +88,22 @@ void replay_filter_raw_video(void* data, struct video_data* frame)
 			sizeof(struct obs_source_frame*));
 
 	cur_duration = frame->timestamp - output->timestamp;
-	if (cur_duration > filter->duration){
+	while (cur_duration > 0 && cur_duration > filter->duration){
 
 		circlebuf_pop_front(&filter->video_frames, NULL,
 			sizeof(struct obs_source_frame*));
 
-		//obs_source_release_frame(parent, output);
 		if (os_atomic_dec_long(&output->refs) <= 0) {
 			obs_source_frame_destroy(output);
 			output = NULL;
+		}
+		if(filter->video_frames.size){
+			circlebuf_peek_front(&filter->video_frames, &output, sizeof(struct obs_source_frame*));
+			cur_duration = frame->timestamp - output->timestamp;
+		}
+		else
+		{
+			cur_duration = 0;
 		}
 	}
 
@@ -255,6 +262,8 @@ static obs_properties_t *replay_filter_properties(void *unused)
 static void replay_filter_remove(void *data, obs_source_t *parent)
 {
 	struct replay_filter *filter = data;
+
+	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
 
 	free_video_data(filter);
 	free_audio_data(filter);

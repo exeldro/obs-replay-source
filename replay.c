@@ -134,3 +134,18 @@ void free_audio_packet(struct obs_audio_data *audio)
 	memset(audio, 0, sizeof(*audio));
 }
 
+const char *obs_module_name(void)
+{
+	return "Replay source";
+}
+
+
+const char *obs_module_description(void)
+{
+	return "Plugin to (slow motion) instant replay sources from memory.";
+}
+
+const char *obs_module_author(void)
+{
+	return "Exeldro";
+}
