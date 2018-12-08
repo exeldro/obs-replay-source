@@ -118,11 +118,11 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		context->next_scene_name = bstrdup(next_scene_name);
 	}
 
-	context->duration = (long)obs_data_get_int(settings, "duration");
-	context->visibility_action = (int)obs_data_get_int(settings, "visibility_action");
-	context->end_action = (int)obs_data_get_int(settings, "end_action");
+	context->duration = (long)obs_data_get_int(settings, SETTING_DURATION);
+	context->visibility_action = (int)obs_data_get_int(settings, SETTING_VISIBILITY_ACTION);
+	context->end_action = (int)obs_data_get_int(settings, SETTING_END_ACTION);
 
-	context->speed_percent = (int)obs_data_get_int(settings, "speed_percent");
+	context->speed_percent = (int)obs_data_get_int(settings, SETTING_SPEED);
 	if (context->speed_percent < 1 || context->speed_percent > 200)
 		context->speed_percent = 100;
 
@@ -155,7 +155,9 @@ static void replay_source_update(void *data, obs_data_t *settings)
 static void replay_source_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_int(settings,SETTING_DURATION,5);
-	obs_data_set_default_int(settings, "speed_percent", 100);
+	obs_data_set_default_int(settings, SETTING_SPEED, 100);
+	obs_data_set_default_int(settings, SETTING_VISIBILITY_ACTION, VISIBILITY_ACTION_CONTINUE);
+	obs_data_set_default_int(settings, SETTING_END_ACTION, END_ACTION_LOOP);
 }
 
 static void replay_source_show(void *data)
@@ -651,14 +653,14 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,1,200,1);
 
-	prop = obs_properties_add_list(props, "visibility_action", "Visibility Action",
+	prop = obs_properties_add_list(props, SETTING_VISIBILITY_ACTION, "Visibility Action",
 			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(prop, "Restart", VISIBILITY_ACTION_RESTART);
 	obs_property_list_add_int(prop, "Pause", VISIBILITY_ACTION_PAUSE);
 	obs_property_list_add_int(prop, "Continue", VISIBILITY_ACTION_CONTINUE);
 	obs_property_list_add_int(prop, "None", VISIBILITY_ACTION_NONE);
 
-	prop = obs_properties_add_list(props, "end_action", "End Action",
+	prop = obs_properties_add_list(props, SETTING_END_ACTION, "End Action",
 			OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
 	obs_property_list_add_int(prop, "Hide", END_ACTION_HIDE);
 	obs_property_list_add_int(prop, "Pause", END_ACTION_PAUSE);
@@ -667,7 +669,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	//obs_enum_scenes(EnumScenes, prop);
 
-	obs_properties_add_int_slider(props, "speed_percent",
+	obs_properties_add_int_slider(props, SETTING_SPEED,
 			obs_module_text("SpeedPercentage"), 1, 200, 1);
 
 	obs_properties_add_button(props,"replay_button","Get replay", replay_button);
