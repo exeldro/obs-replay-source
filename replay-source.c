@@ -43,11 +43,16 @@ struct replay_source {
 	obs_hotkey_id slower_hotkey;
 	obs_hotkey_id normal_speed_hotkey;
 	obs_hotkey_id half_speed_hotkey;
+	obs_hotkey_id trim_front_hotkey;
+	obs_hotkey_id trim_end_hotkey;
+	obs_hotkey_id trim_reset_hotkey;
 	uint64_t      first_frame_timestamp;
 	uint64_t      start_timestamp;
 	uint64_t      last_frame_timestamp;
 	uint64_t      previous_frame_timestamp;
 	uint64_t      pause_timestamp;
+	uint64_t      trim_front;
+	uint64_t      trim_end;
 	
 	struct obs_source_audio audio;
 
@@ -280,6 +285,8 @@ static void replay_retrive(struct replay_source *c)
 			}
 			c->start_timestamp = obs_get_video_frame_time();
 			c->pause_timestamp = 0;
+			c->trim_front = 0;
+			c->trim_end = 0;
 			if(d->video_frames.size){
 				circlebuf_peek_front(&d->video_frames, &frame, sizeof(struct obs_source_frame*));
 				c->first_frame_timestamp = frame->timestamp;
@@ -412,6 +419,69 @@ static void replay_half_speed_hotkey(void *data, obs_hotkey_id id,
 	update_speed(c, 50);
 }
 
+static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	if(c->previous_frame_timestamp > c->start_timestamp)
+	{
+		uint64_t duration = c->previous_frame_timestamp - c->start_timestamp;
+		if(c->speed_percent != 100)
+		{
+			duration = duration * c->speed_percent /100;
+		}
+		if(duration + c->first_frame_timestamp < c->last_frame_timestamp - c->trim_end){
+			c->trim_front = duration;
+		}
+	}
+}
+
+static void replay_trim_end_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	
+	if(c->previous_frame_timestamp > c->start_timestamp)
+	{
+		uint64_t duration = c->previous_frame_timestamp - c->start_timestamp;
+		if(c->speed_percent != 100)
+		{
+			duration = duration * c->speed_percent / 100;
+		}
+		if(duration < (c->first_frame_timestamp + c->trim_front) - c->last_frame_timestamp){
+			
+			c->trim_end = (c->last_frame_timestamp - c->first_frame_timestamp) - duration;
+		}
+	}
+
+}
+
+static void replay_trim_reset_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	c->trim_end = 0;
+	c->trim_front = 0;
+}
+
 static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 {
 	struct replay_source *context = bzalloc(sizeof(struct replay_source));
@@ -453,6 +523,21 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			"ReplaySource.HalfSpeed",
 			obs_module_text("Half speed"),
 			replay_half_speed_hotkey, context);
+
+	context->trim_front_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.TrimFront",
+			obs_module_text("Trim front"),
+			replay_trim_front_hotkey, context);
+
+	context->trim_end_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.TrimEnd",
+			obs_module_text("Trim end"),
+			replay_trim_end_hotkey, context);
+
+	context->trim_reset_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.TrimReset",
+			obs_module_text("Trim reset"),
+			replay_trim_reset_hotkey, context);
 
 	return context;
 }
@@ -536,6 +621,15 @@ static void replay_source_tick(void *data, float seconds)
 			}
 		}
 	}
+	if(context->start_timestamp == timestamp && context->trim_front != 0 && peek_frame->timestamp < context->first_frame_timestamp + context->trim_front){
+		context->start_timestamp -= context->trim_front * 100 / context->speed_percent;
+		while(peek_frame->timestamp < context->first_frame_timestamp + context->trim_front)
+		{
+			circlebuf_pop_front(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
+			circlebuf_push_back(&context->video_frames, &frame, sizeof(struct obs_source_frame*));
+			circlebuf_peek_front(&context->video_frames, &peek_frame, sizeof(struct obs_source_frame*));
+		}
+	}
 	uint64_t video_duration = timestamp - context->start_timestamp;
 	uint64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
 	if(context->audio_frames.size){
@@ -548,7 +642,7 @@ static void replay_source_tick(void *data, float seconds)
 		const uint64_t frame_duration = (context->last_frame_timestamp - context->first_frame_timestamp)/context->video_frames.size*2;
 		const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, peek_audio.frames);
 		uint64_t audio_duration = (peek_audio.timestamp - context->first_frame_timestamp + duration) * 100 / context->speed_percent;
-		while(context->play && context->audio_frames.size && video_duration + frame_duration >= audio_duration && peek_audio.timestamp > previous)
+		while(context->play && context->audio_frames.size > sizeof(peek_audio) && video_duration + frame_duration >= audio_duration && peek_audio.timestamp > previous)
 		{
 			previous = peek_audio.timestamp;
 			circlebuf_pop_front(&context->audio_frames, NULL, sizeof(peek_audio));
@@ -582,14 +676,17 @@ static void replay_source_tick(void *data, float seconds)
 	if(video_duration < source_duration)
 		return;
 
-	while(context->play && context->video_frames.size && video_duration >= source_duration && (frame == NULL || frame->timestamp <= peek_frame->timestamp)){
-
-		if(context->last_frame_timestamp == peek_frame->timestamp)
+	while(context->play && context->video_frames.size > sizeof(struct obs_source_frame*) && video_duration >= source_duration && (frame == NULL || frame->timestamp <= peek_frame->timestamp)){
+		if(peek_frame->timestamp >= context->last_frame_timestamp - context->trim_end)
 		{
 			if(context->end_action != END_ACTION_LOOP)
 			{
 				context->play = false;
 				context->end = true;
+			}
+			else if (context->trim_end != 0)
+			{
+				context->restart = true;
 			}
 			if(context->next_scene_name && context->active)
 			{
