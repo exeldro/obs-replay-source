@@ -13,3 +13,58 @@ Start OBS Studio 64 bit
 Add a replay source.
 Set the source, duration and speed in the properties.
 Set the replay hotkey.
+
+# Replay source
+This source replays audio and video after it is retrieved from a replay filter by using the hotkey or the button in the properties.
+# (async) replay filter
+Keeps the configured seconds from a source in memory. The name of the filter must be the same as the replay source used to play the replay.
+The async version captures audio and video, the non async version only captures video.
+## Properties
+* **Duration**
+Amount of seconds the replay needs to keep in memory.
+* **Source**
+The source that has the (async) replay filter to retrieve the audio en video data from.
+* **Visibility Action**
+The action that should be taken when the replay source becomes active (visible in output) or deactivates.
+  * **Restart**
+Start the replay from the beginning on becoming active and pause on deactivating.
+  * **Pause**
+Resume play on activating and pause on deactivating
+  * **Continue**
+Resume play on activation
+  * **None**
+No action taken on (de)activation
+* **End action**
+The action that should be taken when the replay has finished playing.
+  * **Hide**
+After the replay the source will show nothing
+  * **Pause**
+After the replay the source will keep pause and keep showing the last video frame.
+  * **Loop**
+After the replay restart the replay.
+* **Next scene**
+The scene that should be shown after the replay has finished playing.
+Leave empty if you do not want automatic scene switching.
+* **Speed percentage**
+The speed that the replay should be played. 100 for normal speed. 50 for half speed.
+## hotkeys
+* **Replay**
+Retrieve the replay.
+* **Restart**
+Play the replay from the beginning.
+* **Pause**
+Pauses the replay, freezes the video.
+* **Faster**
+Increase the speed by 50%
+* **Slower**
+Decrease the speed bij 33%
+* **Normal speed**
+Set the speed to 100%
+* **Half speed**
+Set the speed to 50%
+* **Trim front**
+Remove all video before the current position from the replay
+* **Trim end**
+Remove all video after the current position from the replay
+* **Trim reset**
+Undo all trimming done on the replay.
