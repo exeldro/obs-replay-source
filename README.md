@@ -34,6 +34,8 @@ Resume play on activating and pause on deactivating
 Resume play on activation
   * **None**
 No action taken on (de)activation
+* **Start delay**
+Delay in milliseconds before the replay starts playing.
 * **End action**
 The action that should be taken when the replay has finished playing.
   * **Hide**

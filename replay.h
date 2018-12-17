@@ -39,12 +39,12 @@ void free_audio_packet(struct obs_audio_data *audio);
 #define TEXT_FILTER_ASYNC_NAME         obs_module_text("ReplayFilterAsync")
 #define REPLAY_SOURCE_ID               "replay_source"
 #define SETTING_DURATION               "duration"
+#define TEXT_DURATION                  obs_module_text("Duration")
 #define SETTING_SPEED                  "speed_percent"
 #define SETTING_VISIBILITY_ACTION      "visibility_action"
+#define SETTING_START_DELAY            "start_delay"
+#define TEXT_START_DELAY               "Start delay (ms)"
 #define SETTING_END_ACTION             "end_action"
-#define TEXT_DURATION                  obs_module_text("Duration")
-#define SETTING_LOOP                   "loop"
-#define TEXT_LOOP                      obs_module_text("Loop")
 #define SETTING_SOURCE                 "source"
 #define TEXT_SOURCE                    obs_module_text("Source")
 #define SETTING_NEXT_SCENE             "next_scene"
