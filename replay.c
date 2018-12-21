@@ -1,12 +1,85 @@
 #include "replay.h"
+#include "obs-internal.h"
 
+obs_properties_t *replay_filter_properties(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+
+	obs_properties_t *props = obs_properties_create();
+	
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
+
+	return props;
+}
+
+void free_audio_data(struct replay_filter *filter)
+{
+	while (filter->audio_frames.size) {
+		struct obs_audio_data audio;
+
+		circlebuf_pop_front(&filter->audio_frames, &audio,
+				sizeof(struct obs_audio_data));
+		free_audio_packet(&audio);
+	}
+}
+
+void free_video_data(struct replay_filter *filter)
+{
+	while (filter->video_frames.size) {
+		struct obs_source_frame *frame;
+
+		circlebuf_pop_front(&filter->video_frames, &frame,
+				sizeof(struct obs_source_frame*));
+
+		if (os_atomic_dec_long(&frame->refs) <= 0) {
+			obs_source_frame_destroy(frame);
+			frame = NULL;
+		}
+	}
+}
+
+struct obs_audio_data *replay_filter_audio(void *data,
+		struct obs_audio_data *audio)
+{
+	struct replay_filter *filter = data;
+	struct obs_audio_data cached = *audio;
+
+	for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+		if (!audio->data[i])
+			break;
+
+		cached.data[i] = bmemdup(audio->data[i],
+				audio->frames * sizeof(float));
+	}
+	obs_source_t* target = obs_filter_get_target(filter->src);
+	const uint64_t timestamp = target ? obs_source_get_audio_timestamp(target):cached.timestamp;
+	cached.timestamp = timestamp;
+
+	pthread_mutex_lock(&filter->mutex);
+
+	circlebuf_push_back(&filter->audio_frames, &cached, sizeof(cached));
+	
+	circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
+
+	uint64_t cur_duration = timestamp - cached.timestamp;
+	while (filter->audio_frames.size > sizeof(cached) && cur_duration >= filter->duration + MAX_TS_VAR){
+
+		circlebuf_pop_front(&filter->audio_frames, NULL, sizeof(cached));
+
+		free_audio_packet(&cached);
+		circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
+		cur_duration = timestamp - cached.timestamp;
+	}
+	pthread_mutex_unlock(&filter->mutex);
+	return audio;
+}
 
 static inline void copy_frame_data_line(struct obs_source_frame *dst,
 		const struct obs_source_frame *src, uint32_t plane, uint32_t y)
 {
-	uint32_t pos_src = y * src->linesize[plane];
-	uint32_t pos_dst = y * dst->linesize[plane];
-	uint32_t bytes = dst->linesize[plane] < src->linesize[plane] ?
+	const uint32_t pos_src = y * src->linesize[plane];
+	const uint32_t pos_dst = y * dst->linesize[plane];
+	const uint32_t bytes = dst->linesize[plane] < src->linesize[plane] ?
 		dst->linesize[plane] : src->linesize[plane];
 
 	memcpy(dst->data[plane] + pos_dst, src->data[plane] + pos_src, bytes);
@@ -116,6 +189,7 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("replay-source", "en-US")
 
 extern struct obs_source_info replay_filter_info;
+extern struct obs_source_info replay_filter_audio_info;
 extern struct obs_source_info replay_filter_async_info;
 extern struct obs_source_info replay_source_info;
 
@@ -123,6 +197,7 @@ bool obs_module_load(void)
 {
 	obs_register_source(&replay_source_info);
 	obs_register_source(&replay_filter_info);
+	obs_register_source(&replay_filter_audio_info);
 	obs_register_source(&replay_filter_async_info);
 	return true;
 }

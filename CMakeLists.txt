@@ -11,6 +11,7 @@ set(replay-source_SOURCES
 	replay.c
 	replay-source.c
 	replay-filter.c
+	replay-filter-audio.c
 	replay-filter-async.c)
 
 add_library(replay-source MODULE

@@ -10,31 +10,6 @@
 
 #define TEXFORMAT GS_BGRA
 
-static void free_video_data(struct replay_filter *filter)
-{
-	while (filter->video_frames.size) {
-		struct obs_source_frame *frame;
-
-		circlebuf_pop_front(&filter->video_frames, &frame,
-				sizeof(struct obs_source_frame*));
-		//obs_source_release_frame(parent, frame);
-		if (os_atomic_dec_long(&frame->refs) <= 0) {
-			obs_source_frame_destroy(frame);
-			frame = NULL;
-		}
-	}
-}
-
-static void free_audio_data(struct replay_filter *filter)
-{
-	while (filter->audio_frames.size) {
-		struct obs_audio_data audio;
-
-		circlebuf_pop_front(&filter->audio_frames, &audio,
-				sizeof(struct obs_audio_data));
-		free_audio_packet(&audio);
-	}
-}
 
 static const char *replay_filter_get_name(void *unused)
 {
@@ -45,9 +20,9 @@ static const char *replay_filter_get_name(void *unused)
 static inline void copy_frame_data_line(struct obs_source_frame *dst,
 		const struct video_data*src, uint32_t plane, uint32_t y)
 {
-	uint32_t pos_src = y * src->linesize[plane];
-	uint32_t pos_dst = y * dst->linesize[plane];
-	uint32_t bytes = dst->linesize[plane] < src->linesize[plane] ?
+	const uint32_t pos_src = y * src->linesize[plane];
+	const uint32_t pos_dst = y * dst->linesize[plane];
+	const uint32_t bytes = dst->linesize[plane] < src->linesize[plane] ?
 		dst->linesize[plane] : src->linesize[plane];
 
 	memcpy(dst->data[plane] + pos_dst, src->data[plane] + pos_src, bytes);
@@ -61,24 +36,19 @@ void replay_filter_raw_video(void* data, struct video_data* frame)
 		return;
 
 	struct obs_source_frame *output;
-	uint64_t cur_duration;
-
-	if (filter->reset_video) {
-		free_video_data(filter);
-		free_audio_data(filter);
-		filter->reset_video = false;
-	}
 
 	struct obs_source_frame *new_frame = obs_source_frame_create(VIDEO_FORMAT_BGRA, filter->known_width, filter->known_height);
 	new_frame->refs = 1;
 	new_frame->timestamp = frame->timestamp;
 
-	if (new_frame->linesize[0] != new_frame->linesize[0])
+	if (new_frame->linesize[0] != frame->linesize[0])
 		for (uint32_t y = 0; y < filter->known_height; y++)
 			copy_frame_data_line(new_frame, frame, 0, y);
 	else
 		memcpy(new_frame->data[0], frame->data[0],
 				new_frame->linesize[0] * filter->known_height);
+
+	pthread_mutex_lock(&filter->mutex);
 
 	circlebuf_push_back(&filter->video_frames, &new_frame,
 			sizeof(struct obs_source_frame*));
@@ -87,7 +57,7 @@ void replay_filter_raw_video(void* data, struct video_data* frame)
 	circlebuf_peek_front(&filter->video_frames, &output,
 			sizeof(struct obs_source_frame*));
 
-	cur_duration = frame->timestamp - output->timestamp;
+	uint64_t cur_duration = frame->timestamp - output->timestamp;
 	while (cur_duration > 0 && cur_duration > filter->duration){
 
 		circlebuf_pop_front(&filter->video_frames, NULL,
@@ -106,7 +76,7 @@ void replay_filter_raw_video(void* data, struct video_data* frame)
 			cur_duration = 0;
 		}
 	}
-
+	pthread_mutex_unlock(&filter->mutex);
 }
 
 void replay_filter_offscreen_render(void* data, uint32_t cx, uint32_t cy)
@@ -118,8 +88,8 @@ void replay_filter_offscreen_render(void* data, uint32_t cx, uint32_t cy)
 		return;
 	}
 
-	uint32_t width = obs_source_get_base_width(target);
-	uint32_t height = obs_source_get_base_height(target);
+	const uint32_t width = obs_source_get_base_width(target);
+	const uint32_t height = obs_source_get_base_height(target);
 
 	gs_texrender_reset(filter->texrender);
 
@@ -177,10 +147,10 @@ void replay_filter_offscreen_render(void* data, uint32_t cx, uint32_t cy)
 			gs_stagesurface_map(filter->stagesurface,
 								&filter->video_data, &filter->video_linesize);
 
-			uint32_t linesize = output_frame.linesize[0];
+			const uint32_t linesize = output_frame.linesize[0];
 			for (uint32_t i = 0; i < filter->known_height; ++i) {
-				uint32_t dst_offset = linesize * i;
-				uint32_t src_offset = filter->video_linesize * i;
+				const uint32_t dst_offset = linesize * i;
+				const uint32_t src_offset = filter->video_linesize * i;
 				memcpy(output_frame.data[0] + dst_offset,
 					filter->video_data + src_offset,
 					linesize);
@@ -199,11 +169,12 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	
 	uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * SEC_TO_NSEC;
 
-	if (new_duration < filter->duration)
+	if (new_duration < filter->duration){
+		pthread_mutex_lock(&filter->mutex);
 		free_video_data(filter);
+		pthread_mutex_unlock(&filter->mutex);
+	}
 
-	filter->reset_audio = true;
-	filter->reset_video = true;
 	filter->duration = new_duration;
 
 	obs_add_main_render_callback(replay_filter_offscreen_render, filter);
@@ -216,6 +187,7 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 
 	struct replay_filter *context = bzalloc(sizeof(struct replay_filter));
 	context->src = source;
+	pthread_mutex_init(&context->mutex, NULL);
 
 	context->texrender = gs_texrender_create(TEXFORMAT, GS_ZS_NONE);
 	context->video_data = NULL;
@@ -233,6 +205,7 @@ static void replay_filter_destroy(void *data)
 	struct replay_filter *filter = data;
 
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
+	pthread_mutex_lock(&filter->mutex);
 	video_output_close(filter->video_output);
 
 	gs_stagesurface_unmap(filter->stagesurface);
@@ -240,11 +213,13 @@ static void replay_filter_destroy(void *data)
 	gs_texrender_destroy(filter->texrender);
 
 	free_audio_packet(&filter->audio_output);
+	
+	free_video_data(filter);
+	free_video_data(filter);
+	pthread_mutex_unlock(&filter->mutex);
 	circlebuf_free(&filter->video_frames);
 	circlebuf_free(&filter->audio_frames);
-
-
-	
+	pthread_mutex_destroy(&filter->mutex);
 	bfree(data);
 }
 
@@ -264,9 +239,10 @@ static void replay_filter_remove(void *data, obs_source_t *parent)
 	struct replay_filter *filter = data;
 
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
-
+	pthread_mutex_lock(&filter->mutex);
 	free_video_data(filter);
 	free_audio_data(filter);
+	pthread_mutex_unlock(&filter->mutex);
 }
 
 void replay_filter_tick(void* data, float seconds)
@@ -282,7 +258,6 @@ void replay_filter_video_render(void* data, gs_effect_t* effect)
 	obs_source_skip_video_filter(filter->src);
 }
 
-
 struct obs_source_info replay_filter_info = {
 	.id             = REPLAY_FILTER_ID,
 	.type           = OBS_SOURCE_TYPE_FILTER,
@@ -293,6 +268,7 @@ struct obs_source_info replay_filter_info = {
 	.get_name       = replay_filter_get_name,
 	.get_properties = replay_filter_properties,
 	.filter_remove  = replay_filter_remove,
-	.video_tick	= replay_filter_tick,
+	.video_tick     = replay_filter_tick,
+	.filter_audio   = replay_filter_audio,
 	.video_render	= replay_filter_video_render,
 };

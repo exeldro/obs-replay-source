@@ -1,6 +1,7 @@
 #pragma once
 #include <obs-module.h>
 #include <util/circlebuf.h>
+#include <util/threading.h>
 
 struct replay_filter {
 
@@ -25,16 +26,21 @@ struct replay_filter {
 	video_t* video_output;
 
 	uint64_t                       duration;
-	bool                           reset_video;
-	bool                           reset_audio;
 	obs_source_t *src;
+	pthread_mutex_t    mutex;
 };
 
 void obs_source_frame_copy(struct obs_source_frame * dst,const struct obs_source_frame *src);
 void free_audio_packet(struct obs_audio_data *audio);
+struct obs_audio_data *replay_filter_audio(void *data,struct obs_audio_data *audio);
+void free_video_data(struct replay_filter *filter);
+void free_audio_data(struct replay_filter *filter);
+obs_properties_t *replay_filter_properties(void *unused);
 
 #define REPLAY_FILTER_ID               "replay_filter"
 #define TEXT_FILTER_NAME               obs_module_text("ReplayFilter")
+#define REPLAY_FILTER_AUDIO_ID         "replay_filter_audio"
+#define TEXT_FILTER_AUDIO_NAME         obs_module_text("ReplayFilterAudio")
 #define REPLAY_FILTER_ASYNC_ID         "replay_filter_async"
 #define TEXT_FILTER_ASYNC_NAME         obs_module_text("ReplayFilterAsync")
 #define REPLAY_SOURCE_ID               "replay_source"
@@ -46,7 +52,9 @@ void free_audio_packet(struct obs_audio_data *audio);
 #define TEXT_START_DELAY               "Start delay (ms)"
 #define SETTING_END_ACTION             "end_action"
 #define SETTING_SOURCE                 "source"
-#define TEXT_SOURCE                    obs_module_text("Source")
+#define TEXT_SOURCE                    "Video source"
+#define SETTING_SOURCE_AUDIO           "source_audio"
+#define TEXT_SOURCE_AUDIO              "Audio source"
 #define SETTING_NEXT_SCENE             "next_scene"
 #define TEXT_NEXT_SCENE                obs_module_text("NextScene")
 
