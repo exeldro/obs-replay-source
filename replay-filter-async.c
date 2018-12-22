@@ -43,7 +43,6 @@ static void replay_filter_destroy(void *data)
 	struct replay_filter *filter = data;
 
 	pthread_mutex_lock(&filter->mutex);
-	free_audio_packet(&filter->audio_output);
 	free_video_data(filter);
 	free_audio_data(filter);
 	pthread_mutex_unlock(&filter->mutex);

@@ -10,7 +10,6 @@ struct replay_filter {
 
 	/* stores the audio data */
 	struct circlebuf               audio_frames;
-	struct obs_audio_data          audio_output;
 
 	struct obs_video_info ovi;
 	struct obs_audio_info oai;

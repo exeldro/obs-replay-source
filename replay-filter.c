@@ -212,8 +212,6 @@ static void replay_filter_destroy(void *data)
 	gs_stagesurface_destroy(filter->stagesurface);
 	gs_texrender_destroy(filter->texrender);
 
-	free_audio_packet(&filter->audio_output);
-	
 	free_video_data(filter);
 	free_video_data(filter);
 	pthread_mutex_unlock(&filter->mutex);

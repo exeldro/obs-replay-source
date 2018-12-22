@@ -306,7 +306,7 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 	}
 }
 
-static void replay_retrive(struct replay_source *c)
+static void replay_retrieve(struct replay_source *c)
 {
 
 	obs_source_t *s = obs_get_source_by_name(c->source_name);
@@ -360,6 +360,7 @@ static void replay_retrive(struct replay_source *c)
 	
 	if(vf){
 		struct obs_source_frame *frame;
+		pthread_mutex_lock(&vf->mutex);
 		if(vf->video_frames.size){
 			circlebuf_peek_front(&vf->video_frames, &frame, sizeof(struct obs_source_frame*));
 			c->first_frame_timestamp = frame->timestamp;
@@ -370,10 +371,12 @@ static void replay_retrive(struct replay_source *c)
 			c->last_frame_timestamp = frame->timestamp;
 			circlebuf_push_back(&c->video_frames, &frame, sizeof(struct obs_source_frame*));
 		}
+		pthread_mutex_unlock(&vf->mutex);
 	}
 	if(af){
 		struct obs_audio_info info;
 		obs_get_audio_info(&info);
+		pthread_mutex_lock(&af->mutex);
 		struct obs_audio_data audio;
 		if (!vf && af->audio_frames.size)
 		{
@@ -417,6 +420,7 @@ static void replay_retrive(struct replay_source *c)
 				
 			}
 		}
+		pthread_mutex_unlock(&af->mutex);
 	}
 	pthread_mutex_unlock(&c->mutex);
 	if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
@@ -439,7 +443,7 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed || !c->source_name)
 		return;
 
-	replay_retrive(c);
+	replay_retrieve(c);
 }
 
 void update_speed(struct replay_source *c, int new_speed)
@@ -978,7 +982,7 @@ static bool EnumScenes(void *data, obs_source_t *source)
 static bool replay_button(obs_properties_t *props, obs_property_t *property, void *data)
 {
 	struct replay_source *s = data;
-	replay_retrive(s);
+	replay_retrieve(s);
 	return false; // no properties changed
 }
 
