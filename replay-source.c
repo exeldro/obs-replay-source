@@ -391,34 +391,15 @@ static void replay_retrieve(struct replay_source *c)
 			const uint64_t end_timestamp = audio.timestamp + duration;
 			if(!vf){
 				c->last_frame_timestamp = audio.timestamp;
-				memcpy(&cached, &audio, sizeof(cached));
-				for (size_t i = 0; i < MAX_AV_PLANES; i++) {
-					if (!audio.data[i])
-						break;
-
-					cached.data[i] = bmemdup(audio.data[i], cached.frames * sizeof(float));
-				}
-				circlebuf_push_back(&c->audio_frames, &cached, sizeof(struct obs_audio_data));
-			}else if(end_timestamp < c->first_frame_timestamp /*|| end_timestamp > c->last_frame_timestamp*/)
-			{
-					
-			}else if(audio.timestamp <= c->last_frame_timestamp){
-				memcpy(&cached, &audio, sizeof(cached));
-				if(end_timestamp > c->last_frame_timestamp)
-				{
-					cached.frames = (uint32_t)ns_to_audio_frames(info.samples_per_sec, c->last_frame_timestamp - audio.timestamp);
-				}
-				for (size_t i = 0; i < MAX_AV_PLANES; i++) {
-					if (!audio.data[i])
-						break;
-
-					cached.data[i] = bmemdup(audio.data[i], cached.frames * sizeof(float));
-				}
-				circlebuf_push_back(&c->audio_frames, &cached, sizeof(struct obs_audio_data));
-			}else
-			{
-				
 			}
+			memcpy(&cached, &audio, sizeof(cached));
+			for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+				if (!audio.data[i])
+					break;
+
+				cached.data[i] = bmemdup(audio.data[i], cached.frames * sizeof(float));
+			}
+			circlebuf_push_back(&c->audio_frames, &cached, sizeof(struct obs_audio_data));
 		}
 		pthread_mutex_unlock(&af->mutex);
 	}
@@ -692,7 +673,6 @@ static void replay_source_tick(void *data, float seconds)
 		if(context->end && context->end_action == END_ACTION_HIDE)
 		{
 			obs_source_output_video(context->source, NULL);
-			//obs_source_output_audio(context->source, NULL);
 		}
 		return;
 	}
@@ -710,6 +690,9 @@ static void replay_source_tick(void *data, float seconds)
 			context->start_timestamp = timestamp;
 			context->pause_timestamp = 0;
 			context->restart = false;
+			context->audio.timestamp = os_gettime_ns();
+			context->audio.frames = 0;
+			obs_source_output_audio(context->source, &context->audio);
 		}
 		else if(context->restart)
 		{
@@ -722,6 +705,9 @@ static void replay_source_tick(void *data, float seconds)
 			context->restart = false;
 			context->start_timestamp = timestamp;
 			context->pause_timestamp = 0;
+			context->audio.timestamp = os_gettime_ns();
+			context->audio.frames = 0;
+			obs_source_output_audio(context->source, &context->audio);
 			if(context->audio_frames.size)
 			{
 				struct obs_audio_data peek_audio;
