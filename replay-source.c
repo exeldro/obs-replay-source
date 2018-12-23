@@ -708,12 +708,12 @@ static void replay_source_tick(void *data, float seconds)
 			context->audio.timestamp = os_gettime_ns();
 			context->audio.frames = 0;
 			obs_source_output_audio(context->source, &context->audio);
-			if(context->audio_frames.size)
+			if(context->audio_frames.size > sizeof(struct obs_audio_data))
 			{
 				struct obs_audio_data peek_audio;
 				circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
 				uint64_t prev_time = 0;
-				while (prev_time < peek_audio.timestamp && peek_audio.timestamp > context->first_frame_timestamp)
+				while (prev_time <= peek_audio.timestamp)
 				{
 					circlebuf_pop_front(&context->audio_frames, NULL, sizeof(peek_audio));
 					circlebuf_push_back(&context->audio_frames, &peek_audio, sizeof(peek_audio));
@@ -752,47 +752,52 @@ static void replay_source_tick(void *data, float seconds)
 		}
 
 		const int64_t video_duration = timestamp - context->start_timestamp;
-		int64_t source_duration = ((int64_t)peek_frame->timestamp - (int64_t)context->first_frame_timestamp) * 100 / context->speed_percent;
 
-		if(context->audio_frames.size){
+		if(context->audio_frames.size > sizeof(struct obs_audio_data)){
 			struct obs_audio_data peek_audio;
 			
 			circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
 			uint64_t previous = 0;
 			struct obs_audio_info info;
 			obs_get_audio_info(&info);
+			const int64_t frames = context->video_frames.size / sizeof(struct obs_source_frame*);
+			const int64_t frame_duration = (context->last_frame_timestamp - context->first_frame_timestamp)/frames;
+			//const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, peek_audio.frames);
 			int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->first_frame_timestamp) * 100 / context->speed_percent;
-			while(context->play && context->audio_frames.size > sizeof(peek_audio) && video_duration >= audio_duration && peek_audio.timestamp > previous)
+			while(context->play && video_duration + frame_duration > audio_duration && peek_audio.timestamp > previous)
 			{
 				previous = peek_audio.timestamp;
 				circlebuf_pop_front(&context->audio_frames, NULL, sizeof(peek_audio));
 				circlebuf_push_back(&context->audio_frames, &peek_audio, sizeof(peek_audio));
+				if(peek_audio.timestamp > context->first_frame_timestamp - frame_duration && peek_audio.timestamp < context->last_frame_timestamp + frame_duration){
+					context->audio.frames = peek_audio.frames;
 
-				context->audio.frames = peek_audio.frames;
+					if(context->speed_percent != 100)
+					{
+						context->audio.timestamp = context->start_timestamp + (peek_audio.timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
+						context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100;
+					}else
+					{
+						context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->first_frame_timestamp;
+						context->audio.samples_per_sec = info.samples_per_sec;
+					}
+					for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+						context->audio.data[i] = peek_audio.data[i];
+					}
 
-				if(context->speed_percent != 100)
-				{
-					context->audio.timestamp = context->start_timestamp + (peek_audio.timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
-					context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100;
-				}else
-				{
-					context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->first_frame_timestamp;
-					context->audio.samples_per_sec = info.samples_per_sec;
+
+					context->audio.speakers = info.speakers;
+					context->audio.format = AUDIO_FORMAT_FLOAT_PLANAR;
+
+					obs_source_output_audio(context->source, &context->audio);
 				}
-				for (size_t i = 0; i < MAX_AV_PLANES; i++) {
-					context->audio.data[i] = peek_audio.data[i];
-				}
-
-
-				context->audio.speakers = info.speakers;
-				context->audio.format = AUDIO_FORMAT_FLOAT_PLANAR;
-
-				obs_source_output_audio(context->source, &context->audio);
 				circlebuf_peek_front(&context->audio_frames, &peek_audio, sizeof(peek_audio));
 				audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->first_frame_timestamp) * 100 / context->speed_percent;
 			}
 		}
 
+
+		int64_t source_duration = (peek_frame->timestamp - context->first_frame_timestamp) * 100 / context->speed_percent;
 		if(video_duration < source_duration){
 			pthread_mutex_unlock(&context->mutex);
 			return;
