@@ -22,8 +22,10 @@ The async version captures audio and video, the non async version only captures 
 ## Properties
 * **Duration**
 Amount of seconds the replay needs to keep in memory.
-* **Source**
-The source that has the (async) replay filter to retrieve the audio en video data from.
+* **Video source**
+The source that has the (async) replay filter to retrieve the video (and audio) data from.
+* **Audio source**
+The source that has the replay audio filter to retrieve the audio data from.
 * **Visibility Action**
 The action that should be taken when the replay source becomes active (visible in output) or deactivates.
   * **Restart**
