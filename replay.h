@@ -46,6 +46,7 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define SETTING_DURATION               "duration"
 #define TEXT_DURATION                  obs_module_text("Duration")
 #define SETTING_SPEED                  "speed_percent"
+#define SETTING_BACKWARD               "backward"
 #define SETTING_VISIBILITY_ACTION      "visibility_action"
 #define SETTING_START_DELAY            "start_delay"
 #define TEXT_START_DELAY               "Start delay (ms)"
