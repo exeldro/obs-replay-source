@@ -46,6 +46,8 @@ After the replay the source will show nothing
 After the replay the source will keep pause and keep showing the last video frame.
   * **Loop**
 After the replay restart the replay.
+  * **Reverse**
+After the replay reverse the playing direction of the replay.
 * **Next scene**
 The scene that should be shown after the replay has finished playing.
 Leave empty if you do not want automatic scene switching.
