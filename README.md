@@ -51,6 +51,8 @@ The scene that should be shown after the replay has finished playing.
 Leave empty if you do not want automatic scene switching.
 * **Speed percentage**
 The speed that the replay should be played. 100 for normal speed. 50 for half speed.
+* **Backward**
+Start playing replays backwards
 ## hotkeys
 * **Replay**
 Retrieve the replay.
@@ -66,6 +68,8 @@ Decrease the speed bij 33%
 Set the speed to 100%
 * **Half speed**
 Set the speed to 50%
+* **Backward**
+Reverse the playing direction
 * **Trim front**
 Remove all video before the current position from the replay
 * **Trim end**
