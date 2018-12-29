@@ -79,17 +79,16 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	const uint64_t timestamp = frame->timestamp;
 	uint64_t adjusted_time = timestamp + filter->timing_adjust;
 	const uint64_t os_time = os_gettime_ns();
-	if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+	if(filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR)
+	{
+		adjusted_time = timestamp;
+		filter->timing_adjust = 0;
+	} else if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
 	{
 		filter->timing_adjust = os_time - timestamp;
 		adjusted_time = os_time;
 	}
 	new_frame->timestamp = adjusted_time;
-	const uint64_t time = os_gettime_ns();
-	if(time - MAX_TS_VAR > new_frame->timestamp || time + MAX_TS_VAR < new_frame->timestamp)
-	{
-		new_frame->timestamp = time;
-	}
 
 	pthread_mutex_lock(&filter->mutex);
 	circlebuf_push_back(&filter->video_frames, &new_frame,

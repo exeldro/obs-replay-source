@@ -58,7 +58,11 @@ struct obs_audio_data *replay_filter_audio(void *data,
 	const uint64_t timestamp = cached.timestamp;
 	uint64_t adjusted_time = timestamp + filter->timing_adjust;
 	const uint64_t os_time = os_gettime_ns();
-	if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+	if(filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR)
+	{
+		adjusted_time = timestamp;
+		filter->timing_adjust = 0;
+	}else if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
 	{
 		filter->timing_adjust = os_time - timestamp;
 		adjusted_time = os_time;
