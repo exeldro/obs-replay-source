@@ -3,6 +3,9 @@
 #include <util/platform.h>
 #include <util/dstr.h>
 #include <util/threading.h>
+#include <media-io/video-io.h>
+#include <media-io/video-frame.h>
+#include <media-io/video-scaler.h>
 #include <../UI/obs-frontend-api/obs-frontend-api.h>
 #include <obs-scene.h>
 #include "replay.h"
@@ -66,11 +69,14 @@ struct replay_source {
 	bool          restart;
 	bool          active;
 	bool          end;
+	bool          saving;
+	bool          save_closing;
 	
 	/* contains struct obs_source_frame* */
 	struct obs_source_frame**        video_frames;
 	uint64_t                         video_frame_count;
 	uint64_t                         video_frame_position;
+	uint64_t                         video_save_position;
 
 	/* stores the audio data */
 	struct obs_audio_data*         audio_frames;
@@ -79,6 +85,18 @@ struct replay_source {
 	struct obs_audio_data          audio_output;
 
 	pthread_mutex_t    mutex;
+
+	uint32_t known_width;
+	uint32_t known_height;
+
+	video_t* video_output;
+	obs_output_t* fileOutput;
+	obs_encoder_t* h264Recording;
+	audio_t* audio_t;
+	video_scaler_t *scaler;
+	bool save_file;
+	char *file_format;
+	char *directory;
 };
 
 
@@ -267,6 +285,29 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		}
 		obs_source_release(s);
 	}
+	context->save_file = obs_data_get_bool(settings, SETTING_SAVE);
+	const char *file_format = obs_data_get_string(settings, SETTING_FILE_FORMAT);
+	if(context->file_format)
+	{
+		if(strcmp(context->file_format, file_format) != 0)
+		{
+			bfree(context->file_format);
+			context->file_format = bstrdup(file_format);
+		}
+	}else{
+		context->file_format = bstrdup(file_format);
+	}
+	const char *directory = obs_data_get_string(settings, SETTING_DIRECTORY);
+	if(context->directory)
+	{
+		if(strcmp(context->directory, directory) != 0)
+		{
+			bfree(context->directory);
+			context->directory = bstrdup(directory);
+		}
+	}else{
+		context->directory = bstrdup(directory);
+	}
 }
 
 static void replay_source_defaults(obs_data_t *settings)
@@ -277,6 +318,8 @@ static void replay_source_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, SETTING_START_DELAY, 0);
 	obs_data_set_default_int(settings, SETTING_END_ACTION, END_ACTION_LOOP);
 	obs_data_set_default_bool(settings, SETTING_BACKWARD, false);
+	obs_data_set_default_string(settings, SETTING_FILE_FORMAT, "%CCYY-%MM-%DD %hh.%mm.%ss");
+	obs_data_set_default_bool(settings,SETTING_SAVE, false);
 }
 
 static void replay_source_show(void *data)
@@ -365,6 +408,119 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 				c->pause_timestamp = 0;
 			}
 		}
+	}
+}
+
+static void InitFileOutputLossless(struct replay_source* context)
+{
+	context->fileOutput = obs_output_create("ffmpeg_output","replay_ffmpeg_output", NULL,NULL);
+	obs_data_t *foSettings = obs_data_create();
+	obs_data_set_string(foSettings, "format_name", "avi");
+	obs_data_set_string(foSettings, "video_encoder", "utvideo");
+	obs_data_set_string(foSettings, "audio_encoder", "pcm_s16le");
+	obs_output_update(context->fileOutput, foSettings);
+	obs_data_release(foSettings);
+	obs_output_set_media(context->fileOutput, context->video_output, context->audio_t);
+}
+
+bool audio_input_callback(void *param,	uint64_t start_ts, uint64_t end_ts, uint64_t *out_ts, uint32_t active_mixers, struct audio_output_data *mixes){
+	struct replay_source *context = param;
+	*out_ts = start_ts;
+	return true;
+}
+
+void replay_save(struct replay_source *context)
+{
+	if(context->video_frame_count == 0)
+		return;
+
+	const uint32_t width = context->video_frames[0]->width;
+	const uint32_t height = context->video_frames[0]->height;
+	if (context->known_width != width || context->known_height != height) {
+		video_t* t = obs_get_video();
+		const struct video_output_info* ovi = video_output_get_info(t);
+		
+		struct video_output_info vi = {0};
+		vi.format = ovi->format;
+		vi.width = width;
+		vi.height = height;
+		vi.fps_den = ovi->fps_den;
+		vi.fps_num = ovi->fps_num;
+		vi.cache_size = 16;
+		vi.colorspace = ovi->colorspace;
+		vi.range = ovi->range;
+		vi.name = "ReplayOutput";
+
+		video_output_close(context->video_output);
+		const int r = video_output_open(&context->video_output, &vi);
+		if(r != VIDEO_OUTPUT_SUCCESS)
+			return;
+
+		context->known_width = width;
+		context->known_height = height;
+
+		if(context->scaler)
+		{
+			video_scaler_destroy(context->scaler);
+			context->scaler = NULL;
+		}
+
+		struct video_scale_info ssi;
+		ssi.format = context->video_frames[0]->format;
+		ssi.colorspace = ovi->colorspace;
+		ssi.range = ovi->range;
+		ssi.width = context->video_frames[0]->width;
+		ssi.height =  context->video_frames[0]->height;
+		struct video_scale_info dsi;
+		dsi.format = vi.format;
+		dsi.colorspace = ovi->colorspace;
+		dsi.range = ovi->range;
+		dsi.height = height;
+		dsi.width = width;
+		video_scaler_create(&context->scaler, &dsi, &ssi,VIDEO_SCALE_DEFAULT);
+	}
+	if(!context->audio_t)
+	{
+		audio_t* t = obs_get_audio();
+		const struct audio_output_info* oai = audio_output_get_info(t);
+		struct audio_output_info oi ;
+		oi.name = "ReplayAudio";
+		oi.speakers = oai->speakers;
+		oi.samples_per_sec = oai->samples_per_sec;
+		oi.format = oai->format;
+		oi.input_param = context;
+		oi.input_callback = audio_input_callback;
+		const int r = audio_output_open(&context->audio_t, &oi);
+		if(r != AUDIO_OUTPUT_SUCCESS)
+			return;
+	}
+	if(!context->fileOutput)
+		InitFileOutputLossless(context);
+
+	char *filename = os_generate_formatted_filename("avi", true, context->file_format);
+	struct dstr path={NULL,0,0};
+	dstr_copy(&path, context->directory);
+	dstr_replace(&path, "\\", "/");
+	if (dstr_end(&path) != '/')
+		dstr_cat_ch(&path, '/');
+	dstr_cat(&path, filename);
+	bfree(filename);
+	obs_data_t *settings = obs_data_create();
+	obs_data_set_string(settings, "path", path.array);
+	obs_data_set_string(settings, "url", path.array);
+
+	obs_output_update(context->fileOutput, settings);
+	dstr_free(&path);
+	obs_data_release(settings);
+
+
+	context->video_save_position = 0;
+	context->saving = true;
+
+	if(!obs_output_start(context->fileOutput))
+	{
+		const char * error = obs_output_get_last_error(context->fileOutput);
+		return;
 	}
 }
 
@@ -488,6 +644,8 @@ static void replay_retrieve(struct replay_source *c)
 		}
 		pthread_mutex_unlock(&af->mutex);
 	}
+	if(c->save_file && !c->saving)
+		replay_save(c);
 	pthread_mutex_unlock(&c->mutex);
 	if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
 	{
@@ -741,6 +899,12 @@ static void replay_source_destroy(void *data)
 	if (context->next_scene_name)
 		bfree(context->next_scene_name);
 
+	if (context->directory)
+		bfree(context->directory);
+
+	if (context->file_format)
+		bfree(context->file_format);
+
 	pthread_mutex_lock(&context->mutex);
 
 	for(uint64_t i = 0; i < context->video_frame_count; i++)
@@ -761,6 +925,10 @@ static void replay_source_destroy(void *data)
 	context->audio_frame_count = 0;
 	if(context->audio_frames)
 		bfree(context->audio_frames);
+	
+	if(context->scaler)
+		video_scaler_destroy(context->scaler);
+
 	pthread_mutex_unlock(&context->mutex);
 	pthread_mutex_destroy(&context->mutex);
 	bfree(context);
@@ -815,6 +983,42 @@ void replay_source_end_action(struct replay_source* context)
 static void replay_source_tick(void *data, float seconds)
 {
 	struct replay_source *context = data;
+
+	if(context->saving)
+	{
+		if(!obs_output_active(context->fileOutput))
+		{
+			const char* error = obs_output_get_last_error(context->fileOutput);
+			context->saving = false;
+		}
+		struct obs_source_frame* frame = context->video_frames[context->video_save_position];
+		struct video_frame output_frame;
+		if (video_output_lock_frame(context->video_output, &output_frame, 1, frame->timestamp))
+		{
+			video_scaler_scale(context->scaler, output_frame.data, output_frame.linesize, frame->data,frame->linesize);
+			video_output_unlock_frame(context->video_output);
+		}
+		context->video_save_position++;
+		if(context->video_save_position >= context->video_frame_count)
+		{
+			context->saving = false;
+			context->save_closing = true;
+		}
+	}else if(context->save_closing)
+	{
+		uint64_t f2 = obs_output_get_total_frames(context->fileOutput);
+		if(!obs_output_active(context->fileOutput))
+		{
+			const char* error = obs_output_get_last_error(context->fileOutput);
+			int t = 0;
+			context->save_closing = false;
+		}
+		if(f2 >= context->video_frame_count){
+			obs_output_force_stop(context->fileOutput);
+			context->save_closing = false;
+		}
+
+	}
 
 	if(!context->video_frame_count && !context->audio_frame_count){
 		context->play = false;
@@ -1168,6 +1372,10 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_properties_add_int_slider(props, SETTING_SPEED,
 			obs_module_text("SpeedPercentage"), 1, 200, 1);
 	obs_properties_add_bool(props, SETTING_BACKWARD,"Backwards");
+
+	obs_properties_add_bool(props,SETTING_SAVE,"Save");
+	obs_properties_add_path(props,SETTING_DIRECTORY,"Directory",OBS_PATH_DIRECTORY,NULL,NULL);
+	obs_properties_add_text(props,SETTING_FILE_FORMAT,"Filename Formatting",OBS_TEXT_DEFAULT);
 
 	obs_properties_add_button(props,"replay_button","Get replay", replay_button);
 
