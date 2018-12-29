@@ -131,14 +131,25 @@ static void replay_backward_hotkey(void *data, obs_hotkey_id id,
 		if(c->pause_timestamp)
 		{
 			c->start_timestamp += time - c->pause_timestamp;
-			c->pause_timestamp = time;
+			c->pause_timestamp = 0;
 		}
 		c->backward = !c->backward;
+		c->play = true;
+		if(c->end){
+			c->end = false;
+			if(c->backward && c->video_frame_count)
+			{
+				c->video_frame_position = c->video_frame_count - 1;
+			}else
+			{
+				c->video_frame_position = 0;
+			}
+		}
 		const int64_t duration = ((int64_t)c->last_frame_timestamp - (int64_t)c->first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
 		int64_t play_duration = time - c->start_timestamp;
-		while(duration && play_duration > duration)
+		if(play_duration > duration)
 		{
-			play_duration -= duration;
+			play_duration = duration;
 		}
 		c->start_timestamp = time - duration + play_duration;
 	}
