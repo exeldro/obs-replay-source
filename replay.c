@@ -37,6 +37,10 @@ void free_video_data(struct replay_filter *filter)
 		}
 	}
 }
+static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
+{
+	return (ts1 < ts2) ?  (ts2 - ts1) : (ts1 - ts2);
+}
 
 struct obs_audio_data *replay_filter_audio(void *data,
 		struct obs_audio_data *audio)
@@ -51,9 +55,15 @@ struct obs_audio_data *replay_filter_audio(void *data,
 		cached.data[i] = bmemdup(audio->data[i],
 				audio->frames * sizeof(float));
 	}
-	obs_source_t* target = obs_filter_get_target(filter->src);
-	const uint64_t timestamp = target ? obs_source_get_audio_timestamp(target):cached.timestamp;
-	cached.timestamp = timestamp;
+	const uint64_t timestamp = cached.timestamp;
+	uint64_t adjusted_time = timestamp + filter->timing_adjust;
+	const uint64_t os_time = os_gettime_ns();
+	if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+	{
+		filter->timing_adjust = os_time - timestamp;
+		adjusted_time = os_time;
+	}
+	cached.timestamp = adjusted_time;
 
 	pthread_mutex_lock(&filter->mutex);
 
@@ -61,14 +71,14 @@ struct obs_audio_data *replay_filter_audio(void *data,
 	
 	circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
 
-	uint64_t cur_duration = timestamp - cached.timestamp;
+	uint64_t cur_duration = adjusted_time - cached.timestamp;
 	while (filter->audio_frames.size > sizeof(cached) && cur_duration >= filter->duration + MAX_TS_VAR){
 
 		circlebuf_pop_front(&filter->audio_frames, NULL, sizeof(cached));
 
 		free_audio_packet(&cached);
 		circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
-		cur_duration = timestamp - cached.timestamp;
+		cur_duration = adjusted_time - cached.timestamp;
 	}
 	pthread_mutex_unlock(&filter->mutex);
 	return audio;

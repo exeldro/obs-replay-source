@@ -62,6 +62,11 @@ static void replay_filter_remove(void *data, obs_source_t *parent)
 	pthread_mutex_unlock(&filter->mutex);
 }
 
+static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
+{
+	return (ts1 < ts2) ?  (ts2 - ts1) : (ts1 - ts2);
+}
+
 static struct obs_source_frame *replay_filter_video(void *data,
 		struct obs_source_frame *frame)
 {
@@ -71,7 +76,20 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
 	new_frame->refs = 1;
 	obs_source_frame_copy(new_frame, frame);
-	new_frame->timestamp = obs_get_video_frame_time();
+	const uint64_t timestamp = frame->timestamp;
+	uint64_t adjusted_time = timestamp + filter->timing_adjust;
+	const uint64_t os_time = os_gettime_ns();
+	if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+	{
+		filter->timing_adjust = os_time - timestamp;
+		adjusted_time = os_time;
+	}
+	new_frame->timestamp = adjusted_time;
+	const uint64_t time = os_gettime_ns();
+	if(time - MAX_TS_VAR > new_frame->timestamp || time + MAX_TS_VAR < new_frame->timestamp)
+	{
+		new_frame->timestamp = time;
+	}
 
 	pthread_mutex_lock(&filter->mutex);
 	circlebuf_push_back(&filter->video_frames, &new_frame,

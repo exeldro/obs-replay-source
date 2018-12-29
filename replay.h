@@ -27,6 +27,7 @@ struct replay_filter {
 	uint64_t                       duration;
 	obs_source_t *src;
 	pthread_mutex_t    mutex;
+	int64_t timing_adjust;
 };
 
 void obs_source_frame_copy(struct obs_source_frame * dst,const struct obs_source_frame *src);
