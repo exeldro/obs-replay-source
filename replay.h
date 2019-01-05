@@ -35,6 +35,7 @@ void free_audio_packet(struct obs_audio_data *audio);
 struct obs_audio_data *replay_filter_audio(void *data,struct obs_audio_data *audio);
 void free_video_data(struct replay_filter *filter);
 void free_audio_data(struct replay_filter *filter);
+void obs_enum_scenes(bool (*enum_proc)(void*, obs_source_t*),void *param);
 obs_properties_t *replay_filter_properties(void *unused);
 
 #define REPLAY_FILTER_ID               "replay_filter"
@@ -60,6 +61,7 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define TEXT_NEXT_SCENE                obs_module_text("NextScene")
 #define SETTING_DIRECTORY              "directory"
 #define SETTING_FILE_FORMAT            "file_format"
+#define SETTING_LOSSLESS               "lossless"
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL

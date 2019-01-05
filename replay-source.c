@@ -102,7 +102,7 @@ struct replay_source {
 	obs_encoder_t* h264Recording;
 	audio_t* audio_t;
 	video_scaler_t *scaler;
-	bool save_file;
+	bool lossless;
 	char *file_format;
 	char *directory;
 	uint64_t start_save_timestamp;
@@ -306,6 +306,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	}else{
 		context->file_format = bstrdup(file_format);
 	}
+	context->lossless = obs_data_get_bool(settings, SETTING_LOSSLESS);
 	const char *directory = obs_data_get_string(settings, SETTING_DIRECTORY);
 	if(context->directory)
 	{
@@ -328,6 +329,7 @@ static void replay_source_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, SETTING_END_ACTION, END_ACTION_LOOP);
 	obs_data_set_default_bool(settings, SETTING_BACKWARD, false);
 	obs_data_set_default_string(settings, SETTING_FILE_FORMAT, "%CCYY-%MM-%DD %hh.%mm.%ss");
+	obs_data_set_default_bool(settings, SETTING_LOSSLESS, false);
 }
 
 static void replay_source_show(void *data)
@@ -613,11 +615,15 @@ void replay_save(struct replay_source *context)
 			return;
 		}
 	}
-	if(!context->fileOutput)
-		//InitFileOutputLossless(context);
-		InitFileOutput(context);
+	if(!context->fileOutput){
+		if(context->lossless){
+			InitFileOutputLossless(context);
+		}else{
+			InitFileOutput(context);
+		}
+	}
 
-	char *filename = os_generate_formatted_filename("flv", true, context->file_format);
+	char *filename = os_generate_formatted_filename(context->lossless?"avi":"flv", true, context->file_format);
 	struct dstr path={NULL,0,0};
 	dstr_copy(&path, context->directory);
 	dstr_replace(&path, "\\", "/");
@@ -1571,6 +1577,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_properties_t *props = obs_properties_create();
 	obs_property_t* prop = obs_properties_add_list(props,SETTING_SOURCE,TEXT_SOURCE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumVideoSources, prop);
+	obs_enum_scenes(EnumVideoSources, prop);
 	prop = obs_properties_add_list(props,SETTING_SOURCE_AUDIO,TEXT_SOURCE_AUDIO, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumAudioSources, prop);
 
@@ -1593,7 +1600,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_list_add_int(prop, "Reverse", END_ACTION_REVERSE);
 
 	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
-	//obs_enum_scenes(EnumScenes, prop);
+	obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_int_slider(props, SETTING_SPEED,
 			obs_module_text("SpeedPercentage"), 1, 200, 1);
@@ -1601,6 +1608,7 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	obs_properties_add_path(props,SETTING_DIRECTORY,"Directory",OBS_PATH_DIRECTORY,NULL,NULL);
 	obs_properties_add_text(props,SETTING_FILE_FORMAT,"Filename Formatting",OBS_TEXT_DEFAULT);
+	obs_properties_add_bool(props,SETTING_LOSSLESS,"Lossless");
 
 	obs_properties_add_button(props,"replay_button","Get replay", replay_button);
 
