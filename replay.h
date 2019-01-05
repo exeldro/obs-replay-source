@@ -58,7 +58,6 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define TEXT_SOURCE_AUDIO              "Audio source"
 #define SETTING_NEXT_SCENE             "next_scene"
 #define TEXT_NEXT_SCENE                obs_module_text("NextScene")
-#define SETTING_SAVE                   "save"
 #define SETTING_DIRECTORY              "directory"
 #define SETTING_FILE_FORMAT            "file_format"
 
