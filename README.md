@@ -54,10 +54,18 @@ Leave empty if you do not want automatic scene switching.
 * **Speed percentage**
 The speed that the replay should be played. 100 for normal speed. 50 for half speed.
 * **Backward**
-Start playing replays backwards
+Start playing replays backwards.
+* **Directory**
+Directory to save replays to.
+* **Filename formatting**
+Formatting used to generate a filename for the replay (%CCYY-%MM-%DD %hh.%mm.%ss)
+* **Lossless**
+Use lossless avi or flv format saving the replay.
 ## hotkeys
-* **Replay**
+* **Load replay**
 Retrieve the replay.
+* **Save replay**
+Save the loaded replay disk.
 * **Restart**
 Play the replay from the beginning.
 * **Pause**
