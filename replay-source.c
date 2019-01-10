@@ -1300,6 +1300,8 @@ static void replay_source_tick(void *data, float seconds)
 
 	pthread_mutex_lock(&context->video_mutex);
 	if(context->video_frame_count){
+		if(context->video_frame_position >= context->video_frame_count)
+			context->video_frame_position = context->video_frame_count - 1;
 		struct obs_source_frame * frame = context->video_frames[context->video_frame_position];
 		if(context->backward)
 		{
@@ -1459,6 +1461,7 @@ static void replay_source_tick(void *data, float seconds)
 				context->video_frame_position++;
 				if(context->video_frame_position >= context->video_frame_count)
 				{
+					context->video_frame_position = context->video_frame_count - 1;
 					replay_source_end_action(context);
 					break;
 				}
