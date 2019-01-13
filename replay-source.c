@@ -62,6 +62,8 @@ struct replay_source {
 	obs_hotkey_id trim_front_hotkey;
 	obs_hotkey_id trim_end_hotkey;
 	obs_hotkey_id trim_reset_hotkey;
+	obs_hotkey_id reverse_hotkey;
+	obs_hotkey_id forward_hotkey;
 	obs_hotkey_id backward_hotkey;
 	obs_hotkey_id save_hotkey;
 	uint64_t      first_frame_timestamp;
@@ -147,7 +149,7 @@ static void EnumAudioVideoFilter(obs_source_t *source, obs_source_t *filter, voi
 		c->source_audio_filter = filter;
 }
 
-static void replay_backward_hotkey(void *data, obs_hotkey_id id,
+static void replay_reverse_hotkey(void *data, obs_hotkey_id id,
 		obs_hotkey_t *hotkey, bool pressed)
 {
 	UNUSED_PARAMETER(id);
@@ -181,6 +183,79 @@ static void replay_backward_hotkey(void *data, obs_hotkey_id id,
 			play_duration = duration;
 		}
 		c->start_timestamp = time - duration + play_duration;
+	}
+}
+
+static void replay_forward_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(pressed){
+		const int64_t time = obs_get_video_frame_time();
+		if(c->pause_timestamp)
+		{
+			c->start_timestamp += time - c->pause_timestamp;
+			c->pause_timestamp = 0;
+		}
+		c->play = true;
+		if(c->end){
+			c->end = false;
+			c->video_frame_position = 0;
+			c->start_timestamp = os_gettime_ns();
+			c->backward = false;
+		}else if(c->backward)
+		{
+			c->backward = false;
+		
+			const int64_t duration = ((int64_t)c->last_frame_timestamp - (int64_t)c->first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
+			int64_t play_duration = time - c->start_timestamp;
+			if(play_duration > duration)
+			{
+				play_duration = duration;
+			}
+			c->start_timestamp = time - duration + play_duration;
+		}
+	}
+}
+
+static void replay_backward_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(pressed){
+		const int64_t time = obs_get_video_frame_time();
+		if(c->pause_timestamp)
+		{
+			c->start_timestamp += time - c->pause_timestamp;
+			c->pause_timestamp = 0;
+		}
+		c->play = true;
+		if(c->end || c->video_frame_position == 0){
+			c->end = false;
+			if(c->video_frame_count)
+				c->video_frame_position = c->video_frame_count-1;
+			c->start_timestamp = os_gettime_ns();
+			c->backward = true;
+		}else if(!c->backward)
+		{
+			c->backward = true;
+
+			const int64_t duration = ((int64_t)c->last_frame_timestamp - (int64_t)c->first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
+			int64_t play_duration = time - c->start_timestamp;
+			if(play_duration > duration)
+			{
+				play_duration = duration;
+			}
+			c->start_timestamp = time - duration + play_duration;
+		}
 	}
 }
 
@@ -251,7 +326,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	context->backward_start = obs_data_get_bool(settings, SETTING_BACKWARD);
 	if(context->backward != context->backward_start)
 	{
-		replay_backward_hotkey(context, 0, NULL, true);
+		replay_reverse_hotkey(context, 0, NULL, true);
 	}
 	
 
@@ -1055,6 +1130,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			obs_module_text("Trim reset"),
 			replay_trim_reset_hotkey, context);
 
+	context->reverse_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Reverse",
+			obs_module_text("Reverse"),
+			replay_reverse_hotkey, context);
+
+	context->forward_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.Forward",
+			obs_module_text("Forward"),
+			replay_forward_hotkey, context);
+
 	context->backward_hotkey = obs_hotkey_register_source(source,
 			"ReplaySource.Backward",
 			obs_module_text("Backward"),
@@ -1179,7 +1264,7 @@ void replay_source_end_action(struct replay_source* context)
 	}
 	else if(context->end_action == END_ACTION_REVERSE)
 	{
-		replay_backward_hotkey(context,0,NULL,true);
+		replay_reverse_hotkey(context,0,NULL,true);
 	}else
 	{
 		context->restart = true;
@@ -1362,6 +1447,7 @@ static void replay_source_tick(void *data, float seconds)
 				if(frame->timestamp <= context->first_frame_timestamp + context->trim_front)
 				{
 					replay_source_end_action(context);
+					break;
 				}
 				if(context->video_frame_position == 0){
 					replay_source_end_action(context);
@@ -1467,6 +1553,7 @@ static void replay_source_tick(void *data, float seconds)
 				if(frame->timestamp >= context->last_frame_timestamp - context->trim_end)
 				{
 					replay_source_end_action(context);
+					break;
 				}
 				context->video_frame_position++;
 				if(context->video_frame_position >= context->video_frame_count)
@@ -1481,6 +1568,7 @@ static void replay_source_tick(void *data, float seconds)
 			if(output_frame){
 				replay_output_frame(context, output_frame);
 			}else if(context->video_frame_position >= context->video_frame_count -1){
+				context->video_frame_position = context->video_frame_count - 1;
 				replay_source_end_action(context);
 			}
 		}
