@@ -800,9 +800,13 @@ static void replay_retrieve(struct replay_source *c)
 	}
 	pthread_mutex_unlock(&c->audio_mutex);
 	pthread_mutex_unlock(&c->video_mutex);
-	if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE || c->visibility_action == VISIBILITY_ACTION_NONE)
+	if(c->active || c->visibility_action == VISIBILITY_ACTION_CONTINUE)
 	{
 		c->play = true;
+	}else
+	{
+		c->play = false;
+		c->pause_timestamp = obs_get_video_frame_time();
 	}
 	if(s)
 		obs_source_release(s);
@@ -1063,6 +1067,9 @@ static void replay_source_destroy(void *data)
 {
 	struct replay_source *context = data;
 
+	pthread_mutex_lock(&context->video_mutex);
+	pthread_mutex_lock(&context->audio_mutex);
+
 	if (context->source_name)
 		bfree(context->source_name);
 
@@ -1106,9 +1113,6 @@ static void replay_source_destroy(void *data)
 		context->audio_t = NULL;
 	}
 
-
-	pthread_mutex_lock(&context->video_mutex);
-
 	for(uint64_t i = 0; i < context->video_frame_count; i++)
 	{
 		struct obs_source_frame* frame = context->video_frames[i];
@@ -1118,20 +1122,25 @@ static void replay_source_destroy(void *data)
 		}
 	}
 	context->video_frame_count = 0;
-	if(context->video_frames)
+	if(context->video_frames){
 		bfree(context->video_frames);
+		context->video_frames = NULL;
+	}
 
-	pthread_mutex_lock(&context->audio_mutex);
 	for(uint64_t i = 0; i < context->audio_frame_count; i++)
 	{
 		free_audio_packet(&context->audio_frames[i]);
 	}
 	context->audio_frame_count = 0;
-	if(context->audio_frames)
+	if(context->audio_frames){
 		bfree(context->audio_frames);
+		context->audio_frames = NULL;
+	}
 	
-	if(context->scaler)
+	if(context->scaler){
 		video_scaler_destroy(context->scaler);
+		context->scaler = NULL;
+	}
 
 	pthread_mutex_unlock(&context->video_mutex);
 	pthread_mutex_unlock(&context->audio_mutex);
@@ -1283,7 +1292,8 @@ static void replay_source_tick(void *data, float seconds)
 			context->aac = NULL;
 		}
 	}
-
+	
+	pthread_mutex_lock(&context->video_mutex);
 	if(!context->video_frame_count && !context->audio_frame_count){
 		context->play = false;
 	}
@@ -1293,12 +1303,12 @@ static void replay_source_tick(void *data, float seconds)
 		{
 			obs_source_output_video(context->source, NULL);
 		}
+		pthread_mutex_unlock(&context->video_mutex);
 		return;
 	}
 	context->end = false;
 	const uint64_t timestamp = os_gettime_ns();
 
-	pthread_mutex_lock(&context->video_mutex);
 	if(context->video_frame_count){
 		if(context->video_frame_position >= context->video_frame_count)
 			context->video_frame_position = context->video_frame_count - 1;
