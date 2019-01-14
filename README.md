@@ -78,8 +78,12 @@ Decrease the speed bij 33%
 Set the speed to 100%
 * **Half speed**
 Set the speed to 50%
+* **Reverse**
+Start playing in the reverse direction
+* **Forward**
+Start playing forward
 * **Backward**
-Reverse the playing direction
+Start playing backward
 * **Trim front**
 Remove all video before the current position from the replay
 * **Trim end**
