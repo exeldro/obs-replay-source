@@ -22,6 +22,8 @@ The async version captures audio and video, the non async version only captures 
 ## Properties
 * **Duration**
 Amount of seconds the replay needs to keep in memory.
+* **Maximum replays**
+Maximum number of replays to keep in memory.
 * **Video source**
 The source that has the (async) replay filter to retrieve the video (and audio) data from.
 * **Audio source**
@@ -64,10 +66,22 @@ Use lossless avi or flv format saving the replay.
 ## hotkeys
 * **Load replay**
 Retrieve the replay.
+* **Next**
+Play the next replay.
+* **Previous**
+Play the previous replay.
+* **First**
+Play the first replay.
+* **Last**
+Play the last replay.
+* **Remove**
+Remove the current replay
+* **Clear**
+Remove all replays
 * **Save replay**
-Save the loaded replay disk.
+Save the current replay disk.
 * **Restart**
-Play the replay from the beginning.
+Play the current replay from the beginning.
 * **Pause**
 Pauses the replay, freezes the video.
 * **Faster**
@@ -78,6 +92,8 @@ Decrease the speed bij 33%
 Set the speed to 100%
 * **Half speed**
 Set the speed to 50%
+* **Double speed**
+Set the speed to 200%
 * **Reverse**
 Start playing in the reverse direction
 * **Forward**
@@ -90,3 +106,7 @@ Remove all video before the current position from the replay
 Remove all video after the current position from the replay
 * **Trim reset**
 Undo all trimming done on the replay.
+* **Disable**
+Disable the capturing of replays, removes the replay filters.
+* **Enable**
+Enable the capturing of replays, adds the replay filters.
