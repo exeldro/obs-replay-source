@@ -47,6 +47,8 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define REPLAY_SOURCE_ID               "replay_source"
 #define SETTING_DURATION               "duration"
 #define TEXT_DURATION                  obs_module_text("Duration")
+#define SETTING_REPLAYS                "replays"
+#define TEXT_REPLAYS                   "Maximum replays"
 #define SETTING_SPEED                  "speed_percent"
 #define SETTING_BACKWARD               "backward"
 #define SETTING_VISIBILITY_ACTION      "visibility_action"
