@@ -63,6 +63,18 @@ Directory to save replays to.
 Formatting used to generate a filename for the replay (%CCYY-%MM-%DD %hh.%mm.%ss)
 * **Lossless**
 Use lossless avi or flv format saving the replay.
+* **Progress crop source**
+The right side of the source gets cropped by the percentage of the posistion in the current replay
+* **Text source**
+Text source that gets the text formatted by the next setting
+* **Text format**
+Text for the Text source
+  * **%SPEED%**
+  * **%PROGRESS%**
+  * **%COUNT%** 
+  * **%INDEX%**
+  * **%DURATION%**
+  * **%TIME%**
 ## hotkeys
 * **Load replay**
 Retrieve the replay.
@@ -87,7 +99,11 @@ Pauses the replay, freezes the video.
 * **Faster**
 Increase the speed by 50%
 * **Slower**
-Decrease the speed bij 33%
+Decrease the speed by 33%
+* **Normal or faster**
+If speed is < 100% set speed to 100% else increase the speed by 50%
+* **Normal or slower**
+If speed is > 100% set speed to 100% else decrease the speed by 33%
 * **Normal speed**
 Set the speed to 100%
 * **Half speed**

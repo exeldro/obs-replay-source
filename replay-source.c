@@ -9,6 +9,7 @@
 #include <../UI/obs-frontend-api/obs-frontend-api.h>
 #include <obs-scene.h>
 #include "replay.h"
+#include <string.h>
 
 #define blog(log_level, format, ...) \
 	blog(log_level, "[replay_source: '%s'] " format, \
@@ -80,6 +81,8 @@ struct replay_source {
 	obs_hotkey_id pause_hotkey;
 	obs_hotkey_id faster_hotkey;
 	obs_hotkey_id slower_hotkey;
+	obs_hotkey_id normal_or_faster_hotkey;
+	obs_hotkey_id normal_or_slower_hotkey;
 	obs_hotkey_id normal_speed_hotkey;
 	obs_hotkey_id half_speed_hotkey;
 	obs_hotkey_id double_speed_hotkey;
@@ -134,8 +137,177 @@ struct replay_source {
 	char *directory;
 	uint64_t start_save_timestamp;
 	obs_encoder_t* aac;
+	char *progress_source_name;
+	char *text_source_name;
+	char *text_format;
 };
 
+static void replace_text(struct dstr *str, size_t pos, size_t len,
+		const char *new_text)
+{
+	struct dstr front = {0};
+	struct dstr back = {0};
+
+	dstr_left(&front, str, pos);
+	dstr_right(&back, str, pos + len);
+	dstr_copy_dstr(str, &front);
+	dstr_cat(str, new_text);
+	dstr_cat_dstr(str, &back);
+	dstr_free(&front);
+	dstr_free(&back);
+}
+
+static void replay_update_text(struct replay_source* c)
+{
+	if(!c->text_source_name || !c->text_format)
+		return;
+	obs_source_t *s = obs_get_source_by_name(c->text_source_name);
+	if(!s)
+		return;
+
+	struct dstr sf;
+	size_t pos = 0;
+	char convert[128] = {0};
+	struct dstr buffer;
+	dstr_init(&buffer);
+	dstr_init_copy(&sf, c->text_format);
+	while (pos < sf.len)
+	{
+		//duration, speed, index, count
+		const char *cmp = sf.array + pos;
+		if(astrcmp_n(cmp,"%SPEED%", 7)==0)
+		{
+			dstr_printf(&buffer, "%d", c->speed_percent*(c->backward?-1:1));
+			dstr_cat_ch(&buffer, '%');
+			replace_text(&sf, pos, 7, buffer.array);
+			pos += buffer.len;
+		}
+		else if(astrcmp_n(cmp,"%PROGRESS%", 10)==0)
+		{
+			if(c->current_replay.video_frame_count && c->video_frame_position < c->current_replay.video_frame_count){
+				dstr_printf(&buffer, "%d", c->video_frame_position*100/c->current_replay.video_frame_count);
+				dstr_cat_ch(&buffer, '%');
+			}
+			else
+			{
+				dstr_copy(&buffer,"");
+			}
+			replace_text(&sf, pos, 10, buffer.array);
+			pos += buffer.len;
+		}else if(astrcmp_n(cmp,"%COUNT%", 7)==0)
+		{
+			dstr_printf(&buffer, "%d", c->replays.size / sizeof c->current_replay);
+			replace_text(&sf, pos, 7, buffer.array);
+			pos += buffer.len;
+		}else if(astrcmp_n(cmp,"%INDEX%", 7)==0)
+		{
+			if(c->replays.size){
+				dstr_printf(&buffer, "%d", c->replay_position+1);
+			}else
+			{
+				dstr_copy(&buffer,"0");
+			}
+			replace_text(&sf, pos, 7, buffer.array);
+			pos += buffer.len;
+		}else if(astrcmp_n(cmp,"%DURATION%", 10)==0)
+		{
+			if(c->replays.size){
+				dstr_printf(&buffer, "%.2f", (double)c->current_replay.duration/ (double)1000000000.0);
+			}else
+			{
+				dstr_copy(&buffer,"");
+			}
+			replace_text(&sf, pos, 10, buffer.array);
+			pos += buffer.len;
+		}else if(astrcmp_n(cmp,"%TIME%", 6)==0)
+		{
+			if(c->replays.size && c->start_timestamp){
+				uint64_t time = 0;
+				if(c->pause_timestamp > c->start_timestamp)
+				{
+					time = c->pause_timestamp - c->start_timestamp;
+				}else
+				{
+					time = os_gettime_ns() - c->start_timestamp;
+				}
+				if(c->speed_percent != 100)
+				{
+					time = time * c->speed_percent / 100;
+				}
+				dstr_printf(&buffer, "%.2f", (double)time/ (double)1000000000.0);
+			}else
+			{
+				dstr_copy(&buffer,"");
+			}
+			replace_text(&sf, pos, 6, buffer.array);
+			pos += buffer.len;
+		}
+		else
+		{
+			pos++;
+		}
+	}
+	obs_data_t* settings = obs_data_create();
+	obs_data_set_string(settings,"text", sf.array);
+	obs_source_update(s, settings);
+	obs_data_release(settings);
+	dstr_free(&sf);
+	dstr_free(&buffer);
+	obs_source_release(s);
+}
+
+struct siu
+{
+	uint32_t crop_width;
+	obs_source_t *source;
+};
+static bool EnumSceneItem(obs_scene_t *scene,obs_sceneitem_t *item, void *data)
+{
+	struct siu* siu = data;
+	if(item->source == siu->source)
+	{
+		struct obs_sceneitem_crop crop;
+		obs_sceneitem_get_crop(item,&crop);
+		crop.left = 0;
+		crop.right = siu->crop_width;
+		obs_sceneitem_set_crop(item, &crop);
+	}else if(obs_sceneitem_is_group(item)){
+		obs_scene_enum_items(obs_sceneitem_group_get_scene(item),EnumSceneItem,data);
+	}
+	return true;
+}
+
+static bool EnumScenesItems(void *data, obs_source_t *source)
+{
+	obs_scene_t *scene = obs_scene_from_source(source);
+	obs_scene_enum_items(scene, EnumSceneItem, data);
+	return true;
+}
+
+static void replay_update_progress_crop(struct replay_source* context, uint64_t t)
+{
+	if(context->progress_source_name)
+	{
+		obs_source_t *s = obs_get_source_by_name(context->progress_source_name);
+		if(s)
+		{
+			const uint32_t width = obs_source_get_base_width(s);
+			if(width)
+			{
+				struct siu siu;
+				siu.source = s;
+				if(t && context->current_replay.last_frame_timestamp){
+					siu.crop_width = (context->current_replay.last_frame_timestamp - t) * width / context->current_replay.duration;
+				}else
+				{
+					siu.crop_width = width;
+				}
+				obs_enum_scenes(EnumScenesItems,&siu);
+			}
+			obs_source_release(s);
+		}
+	}
+}
 
 static const char *replay_source_get_name(void *unused)
 {
@@ -343,7 +515,8 @@ static void replay_update_position(struct replay_source *c, bool lock){
 	pthread_mutex_unlock(&c->audio_mutex);
 	if(lock)
 		pthread_mutex_unlock(&c->video_mutex);
-	
+
+	replay_update_text(c);
 }
 
 static void replay_free_replay(struct replay* replay)
@@ -523,6 +696,42 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	}else{
 		context->file_format = bstrdup(file_format);
 	}
+	const char *progress_source = obs_data_get_string(settings, SETTING_PROGRESS_SOURCE);
+	if(context->progress_source_name)
+	{
+		if(strcmp(context->progress_source_name, progress_source) != 0)
+		{
+			bfree(context->progress_source_name);
+			context->progress_source_name = bstrdup(progress_source);
+		}
+	}else{
+		context->progress_source_name = bstrdup(progress_source);
+	}
+
+	const char *text_source = obs_data_get_string(settings, SETTING_TEXT_SOURCE);
+	if(context->text_source_name)
+	{
+		if(strcmp(context->text_source_name, text_source) != 0)
+		{
+			bfree(context->text_source_name);
+			context->text_source_name = bstrdup(text_source);
+		}
+	}else{
+		context->text_source_name = bstrdup(text_source);
+	}
+
+	const char *text = obs_data_get_string(settings, SETTING_TEXT);
+	if(context->text_format)
+	{
+		if(strcmp(context->text_format, text) != 0)
+		{
+			bfree(context->text_format);
+			context->text_format = bstrdup(text);
+		}
+	}else{
+		context->text_format = bstrdup(text);
+	}
+
 	context->lossless = obs_data_get_bool(settings, SETTING_LOSSLESS);
 	const char *directory = obs_data_get_string(settings, SETTING_DIRECTORY);
 	if(context->directory)
@@ -535,6 +744,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	}else{
 		context->directory = bstrdup(directory);
 	}
+	replay_update_text(context);
 }
 
 static void replay_source_defaults(obs_data_t *settings)
@@ -1202,6 +1412,8 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id,
 		replay_free_replay(&replay);
 	}
 	pthread_mutex_unlock(&c->replay_mutex);
+	replay_update_text(c);
+	replay_update_progress_crop(c, 0);
 }
 void update_speed(struct replay_source *c, int new_speed)
 {
@@ -1223,6 +1435,7 @@ void update_speed(struct replay_source *c, int new_speed)
 		c->start_timestamp += old_duration - new_duration;
 	}
 	c->speed_percent = new_speed;
+	replay_update_text(c);
 }
 
 static void replay_faster_hotkey(void *data, obs_hotkey_id id,
@@ -1251,6 +1464,42 @@ static void replay_slower_hotkey(void *data, obs_hotkey_id id,
 		return;
 
 	update_speed(c, c->speed_percent*2/3);
+}
+
+static void replay_normal_or_faster_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	if(c->speed_percent < 100)
+	{
+		update_speed(c, 100);
+	}else{
+		update_speed(c, c->speed_percent*3/2);
+	}
+}
+
+static void replay_normal_or_slower_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	if(c->speed_percent > 100)
+	{
+		update_speed(c, 100);
+	}else{
+		update_speed(c, c->speed_percent*2/3);
+	}
 }
 
 static void replay_normal_speed_hotkey(void *data, obs_hotkey_id id,
@@ -1458,6 +1707,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			obs_module_text("Slower"),
 			replay_slower_hotkey, context);
 
+	context->normal_or_faster_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.NormalOrFaster",
+			"Normal or faster",
+			replay_normal_or_faster_hotkey, context);
+
+	context->normal_or_slower_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.NormalOrSlower",
+			"Normal or slower",
+			replay_normal_or_slower_hotkey, context);
+
 	context->normal_speed_hotkey = obs_hotkey_register_source(source,
 			"ReplaySource.NormalSpeed",
 			obs_module_text("Normal speed"),
@@ -1544,6 +1803,15 @@ static void replay_source_destroy(void *data)
 	if (context->file_format)
 		bfree(context->file_format);
 
+	if (context->progress_source_name)
+		bfree(context->progress_source_name);
+
+	if (context->text_source_name)
+		bfree(context->text_source_name);
+
+	if (context->text_format)
+		bfree(context->text_format);
+
 	if(context->h264Recording)
 	{
 		obs_encoder_release(context->h264Recording);
@@ -1591,6 +1859,7 @@ static void replay_source_destroy(void *data)
 	bfree(context);
 }
 
+
 static void replay_output_frame(struct replay_source* context, struct obs_source_frame* frame)
 {
 	uint64_t t = frame->timestamp;
@@ -1612,6 +1881,8 @@ static void replay_output_frame(struct replay_source* context, struct obs_source
 		obs_source_output_video(context->source, frame);
 	}
 	frame->timestamp = t;
+	replay_update_text(context);
+	replay_update_progress_crop(context, t);
 }
 
 void replay_source_end_action(struct replay_source* context)
@@ -2115,6 +2386,14 @@ static bool replay_button(obs_properties_t *props, obs_property_t *property, voi
 	return false; // no properties changed
 }
 
+static bool EnumTextSources(void *data, obs_source_t *source)
+{
+	obs_property_t *prop = data;
+	if(strcmp(obs_source_get_id(source), "text_gdiplus") == 0 || strcmp(obs_source_get_id(source), "text_ft2_source") == 0)
+		obs_property_list_add_string(prop,obs_source_get_name(source),obs_source_get_name(source));
+	return true;
+}
+
 static obs_properties_t *replay_source_properties(void *data)
 {
 	struct replay_source *s = data;
@@ -2160,7 +2439,15 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_properties_add_text(props,SETTING_FILE_FORMAT,"Filename Formatting",OBS_TEXT_DEFAULT);
 	obs_properties_add_bool(props,SETTING_LOSSLESS,"Lossless");
 
-	obs_properties_add_button(props,"replay_button","Get replay", replay_button);
+	prop = obs_properties_add_list(props,SETTING_PROGRESS_SOURCE,"Progress crop source", OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_enum_sources(EnumVideoSources, prop);
+
+	prop = obs_properties_add_list(props,SETTING_TEXT_SOURCE,"Text source", OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_enum_sources(EnumTextSources, prop);
+
+	obs_properties_add_text(props,SETTING_TEXT,"Text format",OBS_TEXT_MULTILINE);
+
+	obs_properties_add_button(props,"replay_button","Load replay", replay_button);
 
 	return props;
 }
