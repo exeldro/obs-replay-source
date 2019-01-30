@@ -297,7 +297,7 @@ static void replay_update_progress_crop(struct replay_source* context, uint64_t 
 			{
 				struct siu siu;
 				siu.source = s;
-				if(t && context->current_replay.last_frame_timestamp){
+				if(t && context->current_replay.last_frame_timestamp && context->current_replay.duration){
 					siu.crop_width = (context->current_replay.last_frame_timestamp - t) * width / context->current_replay.duration;
 				}else
 				{

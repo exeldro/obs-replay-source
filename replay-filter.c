@@ -134,7 +134,7 @@ void replay_filter_offscreen_render(void* data, uint32_t cx, uint32_t cy)
 		}
 
 		struct video_frame output_frame;
-		if (video_output_lock_frame(filter->video_output,
+		if (filter->video_output && video_output_lock_frame(filter->video_output,
 			&output_frame, 1, os_gettime_ns()))
 		{
 			if (filter->video_data) {
