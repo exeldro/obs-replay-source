@@ -22,6 +22,8 @@ The async version captures audio and video, the non async version only captures 
 ## Properties
 * **Duration**
 Amount of seconds the replay needs to keep in memory.
+* **Load delay**
+Delay in milliseconds before the replay is loaded.
 * **Maximum replays**
 Maximum number of replays to keep in memory.
 * **Video source**
@@ -126,3 +128,7 @@ Undo all trimming done on the replay.
 Disable the capturing of replays, removes the replay filters.
 * **Enable**
 Enable the capturing of replays, adds the replay filters.
+* **Disable next scene**
+Disable the automatic next scene switching function.
+* **Enable next scene**
+Enable the automatic next scene switching function.

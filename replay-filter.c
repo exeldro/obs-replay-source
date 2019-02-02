@@ -7,6 +7,7 @@
 #include <util/circlebuf.h>
 #include "replay.h"
 #include "obs-internal.h"
+#include <string.h>
 
 #define TEXFORMAT GS_BGRA
 
@@ -207,6 +208,7 @@ static void replay_filter_destroy(void *data)
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
 	pthread_mutex_lock(&filter->mutex);
 	video_output_close(filter->video_output);
+	filter->video_output = NULL;
 
 	gs_stagesurface_unmap(filter->stagesurface);
 	gs_stagesurface_destroy(filter->stagesurface);
