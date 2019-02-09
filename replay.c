@@ -1,6 +1,7 @@
 #include "replay.h"
 #include "obs-internal.h"
 #include "../../UI/obs-frontend-api/obs-frontend-api.h"
+#include <math.h>
 
 void free_audio_data(struct replay_filter *filter)
 {
@@ -37,6 +38,7 @@ struct obs_audio_data *replay_filter_audio(void *data,
 {
 	struct replay_filter *filter = data;
 	struct obs_audio_data cached = *audio;
+	bool threshold = !filter->trigger_threshold;
 
 	for (size_t i = 0; i < MAX_AV_PLANES; i++) {
 		if (!audio->data[i])
@@ -44,6 +46,15 @@ struct obs_audio_data *replay_filter_audio(void *data,
 
 		cached.data[i] = bmemdup(audio->data[i],
 				audio->frames * sizeof(float));
+
+		for (size_t j = 0; !threshold && j < audio->frames; j++) {
+			if(fabsf(((float*)audio->data[i])[j]) > filter->threshold)
+				threshold = true;
+		}
+	}
+	if(filter->trigger_threshold && threshold)
+	{
+		filter->trigger_threshold(filter->threshold_data);
 	}
 	const uint64_t timestamp = cached.timestamp;
 	uint64_t adjusted_time = timestamp + filter->timing_adjust;

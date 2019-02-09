@@ -103,6 +103,7 @@ struct replay_source {
 	int64_t       start_delay;
 	int64_t       retrieve_delay;
 	uint64_t      retrieve_timestamp;
+	uint64_t      threshold_timestamp;
 	struct obs_source_audio audio;
 
 	bool          disabled;
@@ -145,6 +146,7 @@ struct replay_source {
 	char *progress_source_name;
 	char *text_source_name;
 	char *text_format;
+	bool sound_trigger;
 };
 
 static void replace_text(struct dstr *str, size_t pos, size_t len,
@@ -579,6 +581,27 @@ static void replay_purge_replays(struct replay_source *context)
 		pthread_mutex_unlock(&context->replay_mutex);
 	}
 }
+void replay_retrieve(struct replay_source *c);
+
+static void replay_trigger_threshold(void *data)
+{
+	struct replay_source *context = data;
+	const uint64_t os_time = os_gettime_ns();
+	uint64_t duration = context->current_replay.duration;
+	if(context->speed_percent < 100.f)
+		 duration = duration * 100.0 / context->speed_percent;
+	if(context->threshold_timestamp && context->threshold_timestamp + context->retrieve_delay + duration > os_time)
+		return;
+
+	context->threshold_timestamp = os_time;
+
+	if(context->retrieve_delay > 0)
+	{
+		context->retrieve_timestamp = os_gettime_ns() + context->retrieve_delay;
+	}else{
+		replay_retrieve(context);
+	}
+}
 
 static void replay_source_update(void *data, obs_data_t *settings)
 {
@@ -656,7 +679,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	{
 		replay_reverse_hotkey(context, 0, NULL, true);
 	}
-
+	context->sound_trigger = obs_data_get_bool(settings, SETTING_SOUND_TRIGGER);
 	if(!context->disabled){
 		
 		obs_source_t *s = obs_get_source_by_name(context->source_name);
@@ -680,6 +703,9 @@ static void replay_source_update(void *data, obs_data_t *settings)
 				obs_source_update(context->source_filter, settings);
 			}
 
+			((struct replay_filter*)context->source_filter->context.data)->threshold_data = data;
+			((struct replay_filter*)context->source_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+
 			obs_source_release(s);
 		}
 		s = obs_get_source_by_name(context->source_audio_name);
@@ -698,6 +724,8 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			}else{
 				obs_source_update(context->source_audio_filter, settings);
 			}
+			((struct replay_filter*)context->source_audio_filter->context.data)->threshold_data = data;
+			((struct replay_filter*)context->source_audio_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
 			obs_source_release(s);
 		}
 	}
@@ -2501,6 +2529,14 @@ static bool replay_text_source_modified(obs_properties_t *props, obs_property_t 
 	return true;
 }
 
+static bool replay_sound_trigger_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *data)
+{
+	const bool sound_trigger = obs_data_get_bool(data, SETTING_SOUND_TRIGGER);
+	obs_property_t* prop = obs_properties_get(props, SETTING_AUDIO_THRESHOLD);
+	obs_property_set_visible(prop, sound_trigger);
+	return true;
+}
+
 static obs_properties_t *replay_source_properties(void *data)
 {
 	struct replay_source *s = data;
@@ -2557,6 +2593,11 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_set_modified_callback(prop, replay_text_source_modified);
 
 	obs_properties_add_text(props,SETTING_TEXT,"Text format",OBS_TEXT_MULTILINE);
+
+	prop = obs_properties_add_bool(props, SETTING_SOUND_TRIGGER, "Sound trigger load replay");
+	obs_property_set_modified_callback(prop, replay_sound_trigger_modified);
+
+	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,"Threshold db",SETTING_AUDIO_THRESHOLD_MIN, SETTING_AUDIO_THRESHOLD_MAX,0.1);
 
 	obs_properties_add_button(props,"replay_button","Load replay", replay_button);
 

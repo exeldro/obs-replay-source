@@ -3,6 +3,7 @@
 #include <util/threading.h>
 #include <media-io/video-io.h>
 #include <media-io/video-frame.h>
+#include <media-io/audio-math.h>
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include "replay.h"
@@ -25,6 +26,8 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 		free_video_data(filter);
 
 	filter->duration = new_duration;
+	const double db = obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
+	filter->threshold = db_to_mul((float)db);
 }
 
 
@@ -71,6 +74,7 @@ obs_properties_t *replay_filter_properties(void *unused)
 	obs_properties_t *props = obs_properties_create();
 	
 	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
+	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,"Threshold db",SETTING_AUDIO_THRESHOLD_MIN, SETTING_AUDIO_THRESHOLD_MAX,0.1);
 
 	return props;
 }

@@ -28,6 +28,8 @@ Delay in milliseconds before the replay is loaded.
 Maximum number of replays to keep in memory.
 * **Video source**
 The source that has the (async) replay filter to retrieve the video (and audio) data from.
+* **Capture internal frames**
+The async replay filter to retrieve the internal video frames to be able to get higher fps.
 * **Audio source**
 The source that has the replay audio filter to retrieve the audio data from.
 * **Visibility Action**
@@ -77,6 +79,10 @@ Text for the Text source
   * **%INDEX%**
   * **%DURATION%**
   * **%TIME%**
+* **Sound trigger load replay**
+Enable sound trigger for loading replays
+* **Threshold db**
+The threshold above which the audio must peak to trigger the loading of a new replay
 ## hotkeys
 * **Load replay**
 Retrieve the replay.

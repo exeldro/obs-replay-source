@@ -24,6 +24,8 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	}
 	filter->duration = new_duration;
 	filter->internal_frames = obs_data_get_bool(settings, SETTING_INTERNAL_FRAMES);
+	const double db = obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
+	filter->threshold = db_to_mul((float)db);
 }
 
 
@@ -170,7 +172,8 @@ static obs_properties_t *replay_filter_properties(void *unused)
 	obs_properties_t *props = obs_properties_create();
 	
 	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
-	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "internal frames");	
+	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "internal frames");
+	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,"Threshold db", SETTING_AUDIO_THRESHOLD_MIN, SETTING_AUDIO_THRESHOLD_MAX,0.1);
 
 	return props;
 }
