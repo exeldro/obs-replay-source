@@ -168,7 +168,7 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
 	
-	uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * SEC_TO_NSEC;
+	uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * MSEC_TO_NSEC;
 
 	if (new_duration < filter->duration){
 		pthread_mutex_lock(&filter->mutex);
@@ -229,7 +229,7 @@ static obs_properties_t *replay_filter_properties(void *unused)
 
 	obs_properties_t *props = obs_properties_create();
 	
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
 
 	return props;
 }

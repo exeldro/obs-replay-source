@@ -63,7 +63,6 @@ struct replay_source {
 	obs_source_t  *source_audio_filter;
 	char          *source_name;
 	char          *source_audio_name;
-	long          duration;
 	int           speed_percent;
 	bool          backward;
 	bool          backward_start;
@@ -640,7 +639,6 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		context->next_scene_name = bstrdup(next_scene_name);
 	}
 
-	context->duration = (long)obs_data_get_int(settings, SETTING_DURATION);
 	context->visibility_action = (int)obs_data_get_int(settings, SETTING_VISIBILITY_ACTION);
 	context->end_action = (int)obs_data_get_int(settings, SETTING_END_ACTION);
 	context->start_delay = obs_data_get_int(settings,SETTING_START_DELAY)*1000000;
@@ -658,8 +656,9 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	{
 		replay_reverse_hotkey(context, 0, NULL, true);
 	}
-	
+
 	if(!context->disabled){
+		
 		obs_source_t *s = obs_get_source_by_name(context->source_name);
 		if(s){
 			context->source_filter = NULL;
@@ -766,8 +765,8 @@ static void replay_source_update(void *data, obs_data_t *settings)
 
 static void replay_source_defaults(obs_data_t *settings)
 {
-	obs_data_set_default_int(settings, SETTING_DURATION, 5);
-	obs_data_set_default_int(settings, SETTING_REPLAYS, 3);
+	obs_data_set_default_int(settings, SETTING_DURATION, 5000);
+	obs_data_set_default_int(settings, SETTING_REPLAYS, 1);
 	obs_data_set_default_int(settings, SETTING_SPEED, 100);
 	obs_data_set_default_int(settings, SETTING_VISIBILITY_ACTION, VISIBILITY_ACTION_CONTINUE);
 	obs_data_set_default_int(settings, SETTING_START_DELAY, 0);
@@ -1948,18 +1947,24 @@ static void replay_output_frame(struct replay_source* context, struct obs_source
 void replay_source_end_action(struct replay_source* context)
 {
 	const int replay_count = context->replays.size / sizeof context->current_replay;
+	if(replay_count == 0)
+	{
+		context->play = false;
+		context->end = true;
+		return;
+	}
 	bool finish = false;
-	if(context->end_action == END_ACTION_HIDE || context->end_action == END_ACTION_PAUSE)
+	if(context->end_action == END_ACTION_HIDE || context->end_action == END_ACTION_PAUSE || (context->end_action == END_ACTION_HIDE_ALL && replay_count == 1) || (context->end_action == END_ACTION_PAUSE_ALL && replay_count == 1))
 	{
 		context->play = false;
 		context->end = true;
 		finish = true;
 	}
-	else if(context->end_action == END_ACTION_REVERSE)
+	else if(context->end_action == END_ACTION_REVERSE || (context->end_action == END_ACTION_REVERSE_ALL && replay_count == 1))
 	{
 		replay_reverse_hotkey(context,0,NULL,true);
 	}
-	else if(context->end_action == END_ACTION_LOOP)
+	else if(context->end_action == END_ACTION_LOOP || (context->end_action == END_ACTION_LOOP_ALL && replay_count == 1))
 	{
 		context->restart = true;
 	}
@@ -2462,6 +2467,38 @@ static bool EnumTextSources(void *data, obs_source_t *source)
 	return true;
 }
 
+static bool replay_video_source_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *data)
+{
+	const char *source_name = obs_data_get_string(data, SETTING_SOURCE);
+	bool async_source = false;
+	if(source_name){
+		obs_source_t *s = obs_get_source_by_name(source_name);
+		if(s && (obs_source_get_output_flags(s) & OBS_SOURCE_ASYNC) == OBS_SOURCE_ASYNC)
+		{
+			async_source = true;
+		}
+	}
+	obs_property_t* prop = obs_properties_get(props, SETTING_INTERNAL_FRAMES);
+	obs_property_set_visible(prop,async_source);
+	return true;
+}
+
+static bool replay_text_source_modified(obs_properties_t *props, obs_property_t *property, obs_data_t *data)
+{
+	const char *source_name = obs_data_get_string(data, SETTING_TEXT_SOURCE);
+	bool text_source = false;
+	if(source_name){
+		obs_source_t *s = obs_get_source_by_name(source_name);
+		if(s)
+		{
+			text_source = true;
+		}
+	}
+	obs_property_t* prop = obs_properties_get(props, SETTING_TEXT);
+	obs_property_set_visible(prop, text_source);
+	return true;
+}
+
 static obs_properties_t *replay_source_properties(void *data)
 {
 	struct replay_source *s = data;
@@ -2470,10 +2507,13 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_t* prop = obs_properties_add_list(props,SETTING_SOURCE,TEXT_SOURCE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumVideoSources, prop);
 	obs_enum_scenes(EnumVideoSources, prop);
+	obs_property_set_modified_callback(prop, replay_video_source_modified);
+	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "Capture internal frames");
+
 	prop = obs_properties_add_list(props,SETTING_SOURCE_AUDIO,TEXT_SOURCE_AUDIO, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumAudioSources, prop);
 
-	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,1,200,1);
+	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,SETTING_DURATION_MIN,SETTING_DURATION_MAX,1000);
 	obs_properties_add_int(props, SETTING_RETRIEVE_DELAY,TEXT_RETRIEVE_DELAY,0,100000,1000);
 	obs_properties_add_int(props,SETTING_REPLAYS,TEXT_REPLAYS,1,10,1);
 
@@ -2513,10 +2553,9 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	prop = obs_properties_add_list(props,SETTING_TEXT_SOURCE,"Text source", OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_sources(EnumTextSources, prop);
+	obs_property_set_modified_callback(prop, replay_text_source_modified);
 
 	obs_properties_add_text(props,SETTING_TEXT,"Text format",OBS_TEXT_MULTILINE);
-
-	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "internal frames");
 
 	obs_properties_add_button(props,"replay_button","Load replay", replay_button);
 

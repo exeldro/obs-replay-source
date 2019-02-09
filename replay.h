@@ -40,14 +40,16 @@ void obs_enum_scenes(bool (*enum_proc)(void*, obs_source_t*),void *param);
 obs_properties_t *replay_filter_properties(void *unused);
 
 #define REPLAY_FILTER_ID               "replay_filter"
-#define TEXT_FILTER_NAME               obs_module_text("ReplayFilter")
+#define TEXT_FILTER_NAME               "Replay filter"
 #define REPLAY_FILTER_AUDIO_ID         "replay_filter_audio"
-#define TEXT_FILTER_AUDIO_NAME         obs_module_text("ReplayFilterAudio")
+#define TEXT_FILTER_AUDIO_NAME         "Replay filter audio"
 #define REPLAY_FILTER_ASYNC_ID         "replay_filter_async"
-#define TEXT_FILTER_ASYNC_NAME         obs_module_text("ReplayFilterAsync")
+#define TEXT_FILTER_ASYNC_NAME         "Replay filter async"
 #define REPLAY_SOURCE_ID               "replay_source"
 #define SETTING_DURATION               "duration"
-#define TEXT_DURATION                  obs_module_text("Duration")
+#define SETTING_DURATION_MIN           1
+#define SETTING_DURATION_MAX           200000
+#define TEXT_DURATION                  "Duration (ms)"
 #define SETTING_RETRIEVE_DELAY         "retrieve_delay"
 #define TEXT_RETRIEVE_DELAY            "Load delay (ms)"
 #define SETTING_REPLAYS                "replays"
@@ -63,7 +65,7 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define SETTING_SOURCE_AUDIO           "source_audio"
 #define TEXT_SOURCE_AUDIO              "Audio source"
 #define SETTING_NEXT_SCENE             "next_scene"
-#define TEXT_NEXT_SCENE                obs_module_text("NextScene")
+#define TEXT_NEXT_SCENE                "Next scene"
 #define SETTING_DIRECTORY              "directory"
 #define SETTING_FILE_FORMAT            "file_format"
 #define SETTING_LOSSLESS               "lossless"
@@ -74,4 +76,7 @@ obs_properties_t *replay_filter_properties(void *unused);
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL
+#endif
+#ifndef MSEC_TO_NSEC
+#define MSEC_TO_NSEC 1000000ULL
 #endif

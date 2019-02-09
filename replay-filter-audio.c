@@ -19,7 +19,7 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	struct replay_filter *filter = data;
 
 
-	const uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * SEC_TO_NSEC;
+	const uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * MSEC_TO_NSEC;
 
 	if (new_duration < filter->duration)
 		free_video_data(filter);
@@ -70,7 +70,7 @@ obs_properties_t *replay_filter_properties(void *unused)
 
 	obs_properties_t *props = obs_properties_create();
 	
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
 
 	return props;
 }
