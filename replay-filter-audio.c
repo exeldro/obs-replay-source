@@ -64,6 +64,17 @@ static void replay_filter_remove(void *data, obs_source_t *parent)
 	free_audio_data(filter);
 }
 
+obs_properties_t *replay_filter_properties(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+
+	obs_properties_t *props = obs_properties_create();
+	
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
+
+	return props;
+}
+
 struct obs_source_info replay_filter_audio_info = {
 	.id             = REPLAY_FILTER_AUDIO_ID,
 	.type           = OBS_SOURCE_TYPE_FILTER,

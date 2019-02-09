@@ -247,6 +247,17 @@ static void replay_update_text(struct replay_source* c)
 			}
 			replace_text(&sf, pos, 6, buffer.array);
 			pos += buffer.len;
+		}else if(astrcmp_n(cmp,"%FPS%", 5)==0)
+		{
+			if(c->current_replay.video_frame_count && c->current_replay.duration){
+				dstr_printf(&buffer, "%d", c->current_replay.video_frame_count * 1000000000U/c->current_replay.duration);
+			}
+			else
+			{
+				dstr_copy(&buffer,"0");
+			}
+			replace_text(&sf, pos, 5, buffer.array);
+			pos += buffer.len;
 		}
 		else
 		{
@@ -667,7 +678,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					obs_source_filter_add(s,context->source_filter);
 				}
 			}else{
-				obs_source_update(context->source_filter,settings);
+				obs_source_update(context->source_filter, settings);
 			}
 
 			obs_source_release(s);
@@ -686,7 +697,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					obs_source_filter_add(s,context->source_audio_filter);
 				}
 			}else{
-				obs_source_update(context->source_audio_filter,settings);
+				obs_source_update(context->source_audio_filter, settings);
 			}
 			obs_source_release(s);
 		}
@@ -2504,6 +2515,8 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_enum_sources(EnumTextSources, prop);
 
 	obs_properties_add_text(props,SETTING_TEXT,"Text format",OBS_TEXT_MULTILINE);
+
+	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "internal frames");
 
 	obs_properties_add_button(props,"replay_button","Load replay", replay_button);
 

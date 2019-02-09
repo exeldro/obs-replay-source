@@ -2,17 +2,6 @@
 #include "obs-internal.h"
 #include "../../UI/obs-frontend-api/obs-frontend-api.h"
 
-obs_properties_t *replay_filter_properties(void *unused)
-{
-	UNUSED_PARAMETER(unused);
-
-	obs_properties_t *props = obs_properties_create();
-	
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
-
-	return props;
-}
-
 void free_audio_data(struct replay_filter *filter)
 {
 	while (filter->audio_frames.size) {

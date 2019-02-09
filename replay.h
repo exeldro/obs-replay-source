@@ -28,6 +28,7 @@ struct replay_filter {
 	obs_source_t *src;
 	pthread_mutex_t    mutex;
 	int64_t timing_adjust;
+	bool internal_frames;
 };
 
 void obs_source_frame_copy(struct obs_source_frame * dst,const struct obs_source_frame *src);
@@ -69,6 +70,7 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define SETTING_PROGRESS_SOURCE        "progress_source"
 #define SETTING_TEXT_SOURCE            "text_source"
 #define SETTING_TEXT                   "text"
+#define SETTING_INTERNAL_FRAMES        "internal_frames"
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL

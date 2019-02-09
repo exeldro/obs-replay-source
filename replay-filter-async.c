@@ -3,6 +3,7 @@
 #include <util/threading.h>
 #include "replay.h"
 #include "obs-internal.h"
+#include "media-io/audio-math.h"
 
 static const char *replay_filter_get_name(void *unused)
 {
@@ -22,6 +23,7 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 		pthread_mutex_unlock(&filter->mutex);
 	}
 	filter->duration = new_duration;
+	filter->internal_frames = obs_data_get_bool(settings, SETTING_INTERNAL_FRAMES);
 }
 
 
@@ -73,32 +75,72 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	struct replay_filter *filter = data;
 	struct obs_source_frame *output;
 
-	struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
-	new_frame->refs = 1;
-	obs_source_frame_copy(new_frame, frame);
-	const uint64_t timestamp = frame->timestamp;
-	uint64_t adjusted_time = timestamp + filter->timing_adjust;
+	uint64_t last_timestamp = 0;
+
+	obs_source_t* target = filter->internal_frames ? obs_filter_get_parent(filter->src) : NULL;
 	const uint64_t os_time = os_gettime_ns();
-	if(filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR)
-	{
-		adjusted_time = timestamp;
-		filter->timing_adjust = 0;
-	} else if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
-	{
-		filter->timing_adjust = os_time - timestamp;
-		adjusted_time = os_time;
-	}
-	new_frame->timestamp = adjusted_time;
+	struct obs_source_frame *new_frame = NULL;
 
 	pthread_mutex_lock(&filter->mutex);
-	circlebuf_push_back(&filter->video_frames, &new_frame,
-			sizeof(struct obs_source_frame*));
-
-	
+	if(filter->video_frames.size){
+		circlebuf_peek_back(&filter->video_frames, &output,sizeof(struct obs_source_frame*));
+		last_timestamp = output->timestamp;
+	}
+	if(target){
+		pthread_mutex_lock(&target->async_mutex);
+		for(size_t i = 0; i< target->async_cache.num;i++){
+			struct obs_source_frame *extra_frame = target->async_cache.array[i].frame;
+			if(extra_frame->timestamp + filter->timing_adjust > last_timestamp)
+			{
+				new_frame = obs_source_frame_create(extra_frame->format, extra_frame->width, extra_frame->height);
+				new_frame->refs = 1;
+				obs_source_frame_copy(new_frame, extra_frame);
+				const uint64_t timestamp = extra_frame->timestamp;
+				uint64_t adjusted_time = timestamp + filter->timing_adjust;
+				if(filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR)
+				{
+					adjusted_time = timestamp;
+					filter->timing_adjust = 0;
+				} else if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+				{
+					filter->timing_adjust = os_time - timestamp;
+					adjusted_time = os_time;
+				}
+				new_frame->timestamp = adjusted_time;
+				last_timestamp = adjusted_time;
+				circlebuf_push_back(&filter->video_frames, &new_frame,sizeof(struct obs_source_frame*));
+				
+			}
+		}
+		pthread_mutex_unlock(&target->async_mutex);
+	}
+	if(frame->timestamp + filter->timing_adjust > last_timestamp){
+		new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
+		new_frame->refs = 1;
+		obs_source_frame_copy(new_frame, frame);
+		const uint64_t timestamp = frame->timestamp;
+		uint64_t adjusted_time = timestamp + filter->timing_adjust;
+		if(filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR)
+		{
+			adjusted_time = timestamp;
+			filter->timing_adjust = 0;
+		} else if(uint64_diff(os_time, adjusted_time) > MAX_TS_VAR)
+		{
+			filter->timing_adjust = os_time - timestamp;
+			adjusted_time = os_time;
+		}
+		new_frame->timestamp = adjusted_time;
+		last_timestamp = adjusted_time;
+		circlebuf_push_back(&filter->video_frames, &new_frame,sizeof(struct obs_source_frame*));
+	}
+	if(!last_timestamp){
+		pthread_mutex_unlock(&filter->mutex);
+		return frame;
+	}
 	circlebuf_peek_front(&filter->video_frames, &output,
 			sizeof(struct obs_source_frame*));
 
-	uint64_t cur_duration = new_frame->timestamp - output->timestamp;
+	uint64_t cur_duration = last_timestamp - output->timestamp;
 	while (cur_duration > 0 && cur_duration > filter->duration){
 
 		circlebuf_pop_front(&filter->video_frames, NULL,
@@ -110,7 +152,7 @@ static struct obs_source_frame *replay_filter_video(void *data,
 		}
 		if(filter->video_frames.size){
 			circlebuf_peek_front(&filter->video_frames, &output, sizeof(struct obs_source_frame*));
-			cur_duration = new_frame->timestamp - output->timestamp;
+			cur_duration = last_timestamp - output->timestamp;
 		}
 		else
 		{
@@ -120,6 +162,19 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	pthread_mutex_unlock(&filter->mutex);
 	return frame;
 }
+
+static obs_properties_t *replay_filter_properties(void *unused)
+{
+	UNUSED_PARAMETER(unused);
+
+	obs_properties_t *props = obs_properties_create();
+	
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, 1, 200, 1);
+	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "internal frames");	
+
+	return props;
+}
+
 
 struct obs_source_info replay_filter_async_info = {
 	.id             = REPLAY_FILTER_ASYNC_ID,
