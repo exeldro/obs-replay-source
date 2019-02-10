@@ -55,6 +55,8 @@ obs_properties_t *replay_filter_properties(void *unused);
 #define SETTING_REPLAYS                "replays"
 #define TEXT_REPLAYS                   "Maximum replays"
 #define SETTING_SPEED                  "speed_percent"
+#define SETTING_SPEED_MIN              0.01f
+#define SETTING_SPEED_MAX              400.0f
 #define SETTING_BACKWARD               "backward"
 #define SETTING_VISIBILITY_ACTION      "visibility_action"
 #define SETTING_START_DELAY            "start_delay"

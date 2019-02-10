@@ -63,7 +63,7 @@ struct replay_source {
 	obs_source_t  *source_audio_filter;
 	char          *source_name;
 	char          *source_audio_name;
-	int           speed_percent;
+	float         speed_percent;
 	bool          backward;
 	bool          backward_start;
 	int           visibility_action;
@@ -182,7 +182,7 @@ static void replay_update_text(struct replay_source* c)
 		const char *cmp = sf.array + pos;
 		if(astrcmp_n(cmp,"%SPEED%", 7)==0)
 		{
-			dstr_printf(&buffer, "%d", c->speed_percent*(c->backward?-1:1));
+			dstr_printf(&buffer, "%.1f", c->speed_percent*(c->backward?-1:1));
 			dstr_cat_ch(&buffer, '%');
 			replace_text(&sf, pos, 7, buffer.array);
 			pos += buffer.len;
@@ -190,7 +190,7 @@ static void replay_update_text(struct replay_source* c)
 		else if(astrcmp_n(cmp,"%PROGRESS%", 10)==0)
 		{
 			if(c->current_replay.video_frame_count && c->video_frame_position < c->current_replay.video_frame_count){
-				dstr_printf(&buffer, "%d", c->video_frame_position*100/c->current_replay.video_frame_count);
+				dstr_printf(&buffer, "%.1f", c->video_frame_position*100.0/c->current_replay.video_frame_count);
 				dstr_cat_ch(&buffer, '%');
 			}
 			else
@@ -235,9 +235,9 @@ static void replay_update_text(struct replay_source* c)
 				{
 					time = os_gettime_ns() - c->start_timestamp;
 				}
-				if(c->speed_percent != 100)
+				if(c->speed_percent != 100.0f)
 				{
-					time = time * c->speed_percent / 100;
+					time = time * c->speed_percent / 100.0;
 				}
 				dstr_printf(&buffer, "%.2f", (double)time/ (double)1000000000.0);
 			}else
@@ -388,7 +388,7 @@ static void replay_reverse_hotkey(void *data, obs_hotkey_id id,
 				c->video_frame_position = 0;
 			}
 		}
-		const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
+		const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
 		int64_t play_duration = time - c->start_timestamp;
 		if(play_duration > duration)
 		{
@@ -423,7 +423,7 @@ static void replay_forward_hotkey(void *data, obs_hotkey_id id,
 		{
 			c->backward = false;
 		
-			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
+			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
 			int64_t play_duration = time - c->start_timestamp;
 			if(play_duration > duration)
 			{
@@ -460,7 +460,7 @@ static void replay_backward_hotkey(void *data, obs_hotkey_id id,
 		{
 			c->backward = true;
 
-			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * (int64_t)100 / (int64_t)c->speed_percent;
+			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
 			int64_t play_duration = time - c->start_timestamp;
 			if(play_duration > duration)
 			{
@@ -502,16 +502,16 @@ static void replay_update_position(struct replay_source *c, bool lock){
 	c->start_timestamp = os_gettime_ns();
 	c->backward = c->backward_start;
 	if(!c->backward && c->current_replay.trim_front != 0){
-		if(c->speed_percent == 100){
+		if(c->speed_percent == 100.0f){
 			c->start_timestamp -= c->current_replay.trim_front;
 		}else{
-			c->start_timestamp -= c->current_replay.trim_front * 100 / c->speed_percent;
+			c->start_timestamp -= c->current_replay.trim_front * 100.0 / c->speed_percent;
 		}
 	}else if(c->backward && c->current_replay.trim_end != 0){
-		if(c->speed_percent == 100){
+		if(c->speed_percent == 100.0f){
 			c->start_timestamp -= c->current_replay.trim_end;
 		}else{
-			c->start_timestamp -= c->current_replay.trim_end * 100 / c->speed_percent;
+			c->start_timestamp -= c->current_replay.trim_end * 100.0 / c->speed_percent;
 		}
 	}
 	c->pause_timestamp = 0;
@@ -647,9 +647,9 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	context->replay_max = (int)obs_data_get_int(settings, SETTING_REPLAYS);
 	replay_purge_replays(context);
 
-	context->speed_percent = (int)obs_data_get_int(settings, SETTING_SPEED);
-	if (context->speed_percent < 1 || context->speed_percent > 200)
-		context->speed_percent = 100;
+	context->speed_percent = obs_data_get_double(settings, SETTING_SPEED);
+	if (context->speed_percent < SETTING_SPEED_MIN  || context->speed_percent > SETTING_SPEED_MAX)
+		context->speed_percent = 100.0f;
 
 	context->backward_start = obs_data_get_bool(settings, SETTING_BACKWARD);
 	if(context->backward != context->backward_start)
@@ -1216,17 +1216,17 @@ static void replay_retrieve(struct replay_source *c)
 
 	if(c->start_delay>0){
 		if(c->backward_start){
-			if(c->speed_percent == 100){
+			if(c->speed_percent == 100.0f){
 				new_replay.trim_end = c->start_delay * -1;
 			}else{
-				new_replay.trim_end = c->start_delay * c->speed_percent / -100;
+				new_replay.trim_end = c->start_delay * c->speed_percent / -100.0;
 			}
 			new_replay.trim_front = 0;
 		}else{
-			if(c->speed_percent == 100){
+			if(c->speed_percent == 100.0f){
 				new_replay.trim_front = c->start_delay * -1;
 			}else{
-				new_replay.trim_front = c->start_delay * c->speed_percent / -100;
+				new_replay.trim_front = c->start_delay * c->speed_percent / -100.0;
 			}
 			new_replay.trim_end = 0;
 		}
@@ -1464,10 +1464,12 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id,
 	replay_update_text(c);
 	replay_update_progress_crop(c, 0);
 }
-void update_speed(struct replay_source *c, int new_speed)
+void update_speed(struct replay_source *c, float new_speed)
 {
-	if(new_speed < 1)
-		new_speed = 1;
+	if(new_speed < SETTING_SPEED_MIN)
+		new_speed = SETTING_SPEED_MIN;
+	if(new_speed > SETTING_SPEED_MAX)
+		new_speed = SETTING_SPEED_MAX;
 
 	if(new_speed == c->speed_percent)
 		return;
@@ -1479,8 +1481,8 @@ void update_speed(struct replay_source *c, int new_speed)
 		{
 			duration = c->current_replay.last_frame_timestamp - peek_frame->timestamp;
 		}
-		const uint64_t old_duration = duration * 100 / c->speed_percent;
-		const uint64_t new_duration = duration * 100 / new_speed;
+		const uint64_t old_duration = duration * 100.0 / c->speed_percent;
+		const uint64_t new_duration = duration * 100.0 / new_speed;
 		c->start_timestamp += old_duration - new_duration;
 	}
 	c->speed_percent = new_speed;
@@ -1498,7 +1500,7 @@ static void replay_faster_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed)
 		return;
 
-	update_speed(c, c->speed_percent*3/2);
+	update_speed(c, c->speed_percent*3.0/2.0);
 }
 
 static void replay_slower_hotkey(void *data, obs_hotkey_id id,
@@ -1512,7 +1514,7 @@ static void replay_slower_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed)
 		return;
 
-	update_speed(c, c->speed_percent*2/3);
+	update_speed(c, c->speed_percent*2.0/3.0);
 }
 
 static void replay_normal_or_faster_hotkey(void *data, obs_hotkey_id id,
@@ -1525,11 +1527,11 @@ static void replay_normal_or_faster_hotkey(void *data, obs_hotkey_id id,
 
 	if(!pressed)
 		return;
-	if(c->speed_percent < 100)
+	if(c->speed_percent < 100.0f)
 	{
-		update_speed(c, 100);
+		update_speed(c, 100.0f);
 	}else{
-		update_speed(c, c->speed_percent*3/2);
+		update_speed(c, c->speed_percent*3.0/2.0);
 	}
 }
 
@@ -1543,11 +1545,11 @@ static void replay_normal_or_slower_hotkey(void *data, obs_hotkey_id id,
 
 	if(!pressed)
 		return;
-	if(c->speed_percent > 100)
+	if(c->speed_percent > 100.0f)
 	{
-		update_speed(c, 100);
+		update_speed(c, 100.0f);
 	}else{
-		update_speed(c, c->speed_percent*2/3);
+		update_speed(c, c->speed_percent*2.0/3.0);
 	}
 }
 
@@ -1562,7 +1564,7 @@ static void replay_normal_speed_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed)
 		return;
 
-	update_speed(c, 100);
+	update_speed(c, 100.0f);
 }
 
 static void replay_half_speed_hotkey(void *data, obs_hotkey_id id,
@@ -1576,7 +1578,7 @@ static void replay_half_speed_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed)
 		return;
 
-	update_speed(c, 50);
+	update_speed(c, 50.0f);
 }
 
 static void replay_double_speed_hotkey(void *data, obs_hotkey_id id,
@@ -1590,7 +1592,7 @@ static void replay_double_speed_hotkey(void *data, obs_hotkey_id id,
 	if(!pressed)
 		return;
 
-	update_speed(c, 200);
+	update_speed(c, 200.0f);
 }
 
 static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
@@ -1606,9 +1608,9 @@ static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
 
 	const uint64_t timestamp = obs_get_video_frame_time();
 	int64_t duration = timestamp - c->start_timestamp;
-	if(c->speed_percent != 100)
+	if(c->speed_percent != 100.0f)
 	{
-		duration = duration * c->speed_percent / 100;
+		duration = duration * c->speed_percent / 100.0;
 	}
 	if(c->backward){
 		duration = (c->current_replay.last_frame_timestamp - c->current_replay.first_frame_timestamp) - duration;
@@ -1635,9 +1637,9 @@ static void replay_trim_end_hotkey(void *data, obs_hotkey_id id,
 	if(timestamp > c->start_timestamp)
 	{
 		int64_t duration = timestamp - c->start_timestamp;
-		if(c->speed_percent != 100)
+		if(c->speed_percent != 100.0f)
 		{
-			duration = duration * c->speed_percent / 100;
+			duration = duration * c->speed_percent / 100.0;
 		}
 		if(!c->backward){
 			duration = (c->current_replay.last_frame_timestamp - c->current_replay.first_frame_timestamp) - duration;
@@ -1667,10 +1669,10 @@ static void replay_trim_reset_hotkey(void *data, obs_hotkey_id id,
 	c->current_replay.trim_end = 0;
 
 	if(c->start_delay>0){
-		if(c->speed_percent == 100){
+		if(c->speed_percent == 100.0f){
 			c->current_replay.trim_front = c->start_delay * -1;
 		}else{
-			c->current_replay.trim_front = c->start_delay * c->speed_percent / -100;
+			c->current_replay.trim_front = c->start_delay * c->speed_percent / -100.0;
 		}
 	}else
 	{
@@ -1930,9 +1932,9 @@ static void replay_output_frame(struct replay_source* context, struct obs_source
 	}else{
 		frame->timestamp -= context->current_replay.first_frame_timestamp;
 	}
-	if(context->speed_percent != 100)
+	if(context->speed_percent != 100.0f)
 	{
-		frame->timestamp = frame->timestamp * 100 / context->speed_percent;
+		frame->timestamp = frame->timestamp * 100.0 / context->speed_percent;
 	}
 	frame->timestamp += context->start_timestamp;
 	if(context->previous_frame_timestamp <= frame->timestamp){
@@ -2163,10 +2165,10 @@ static void replay_source_tick(void *data, float seconds)
 				context->restart = false;
 				if(context->current_replay.trim_end != 0)
 				{
-					if(context->speed_percent == 100){
+					if(context->speed_percent == 100.0f){
 						context->start_timestamp -= context->current_replay.trim_end;
 					}else{
-						context->start_timestamp -= context->current_replay.trim_end * 100 / context->speed_percent;
+						context->start_timestamp -= context->current_replay.trim_end * 100.0 / context->speed_percent;
 					}
 				
 					if(context->current_replay.trim_end < 0){
@@ -2192,7 +2194,7 @@ static void replay_source_tick(void *data, float seconds)
 			
 			const int64_t video_duration = os_timestamp - (int64_t)context->start_timestamp;
 			//TODO audio backwards
-			int64_t source_duration = (context->current_replay.last_frame_timestamp - frame->timestamp) * 100 / context->speed_percent;
+			int64_t source_duration = (context->current_replay.last_frame_timestamp - frame->timestamp) * 100.0 / context->speed_percent;
 
 			struct obs_source_frame* output_frame = NULL;
 			while(context->play && video_duration >= source_duration)
@@ -2211,7 +2213,7 @@ static void replay_source_tick(void *data, float seconds)
 				
 				frame = context->current_replay.video_frames[context->video_frame_position];
 
-				source_duration = (context->current_replay.last_frame_timestamp - frame->timestamp) * 100 / context->speed_percent;
+				source_duration = (context->current_replay.last_frame_timestamp - frame->timestamp) * 100.0 / context->speed_percent;
 			}
 			if(output_frame){
 				replay_output_frame(context, output_frame);
@@ -2227,10 +2229,10 @@ static void replay_source_tick(void *data, float seconds)
 				context->audio_frame_position = 0;
 				frame = context->current_replay.video_frames[context->video_frame_position];			
 				if(context->current_replay.trim_front != 0){
-					if(context->speed_percent == 100){
+					if(context->speed_percent == 100.0f){
 						context->start_timestamp -= context->current_replay.trim_front;
 					}else{
-						context->start_timestamp -= context->current_replay.trim_front * 100 / context->speed_percent;
+						context->start_timestamp -= context->current_replay.trim_front * 100.0 / context->speed_percent;
 					}
 					if(context->current_replay.trim_front < 0){
 						uint64_t t = frame->timestamp;
@@ -2265,16 +2267,16 @@ static void replay_source_tick(void *data, float seconds)
 				obs_get_audio_info(&info);
 				const int64_t frame_duration = (context->current_replay.last_frame_timestamp - context->current_replay.first_frame_timestamp)/context->current_replay.video_frame_count;
 				//const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, peek_audio.frames);
-				int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+				int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 				while(context->play && video_duration + frame_duration > audio_duration)
 				{
 					if(peek_audio.timestamp > context->current_replay.first_frame_timestamp - frame_duration && peek_audio.timestamp < context->current_replay.last_frame_timestamp + frame_duration){
 						context->audio.frames = peek_audio.frames;
 
-						if(context->speed_percent != 100)
+						if(context->speed_percent != 100.0f)
 						{
-							context->audio.timestamp = context->start_timestamp + (((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100 / context->speed_percent);
-							context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100;
+							context->audio.timestamp = context->start_timestamp + (((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent);
+							context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100.0;
 						}else
 						{
 							context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->current_replay.first_frame_timestamp;
@@ -2296,11 +2298,11 @@ static void replay_source_tick(void *data, float seconds)
 						break;
 					}
 					peek_audio = context->current_replay.audio_frames[context->audio_frame_position];
-					audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+					audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 				}
 				pthread_mutex_unlock(&context->audio_mutex);
 			}
-			int64_t source_duration = (frame->timestamp - context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+			int64_t source_duration = (frame->timestamp - context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 			struct obs_source_frame* output_frame = NULL;
 			while(context->play && video_duration >= source_duration){
 				output_frame = frame;
@@ -2317,7 +2319,7 @@ static void replay_source_tick(void *data, float seconds)
 					break;
 				}
 				frame = context->current_replay.video_frames[context->video_frame_position];
-				source_duration = (frame->timestamp - context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+				source_duration = (frame->timestamp - context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 			}
 			if(output_frame){
 				replay_output_frame(context, output_frame);
@@ -2346,10 +2348,10 @@ static void replay_source_tick(void *data, float seconds)
 			context->pause_timestamp = 0;
 		}
 		if(context->start_timestamp == os_timestamp && context->current_replay.trim_front != 0){
-			if(context->speed_percent == 100){
+			if(context->speed_percent == 100.0f){
 				context->start_timestamp -= context->current_replay.trim_front;
 			}else{
-				context->start_timestamp -= context->current_replay.trim_front * 100 / context->speed_percent;
+				context->start_timestamp -= context->current_replay.trim_front * 100.0 / context->speed_percent;
 			}
 			if(context->current_replay.trim_front < 0){
 				pthread_mutex_unlock(&context->video_mutex);
@@ -2374,7 +2376,7 @@ static void replay_source_tick(void *data, float seconds)
 		struct obs_audio_info info;
 		obs_get_audio_info(&info);
 		
-		int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+		int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 
 		while(context->play && context->current_replay.audio_frame_count > 1 && video_duration >= audio_duration)
 		{
@@ -2402,10 +2404,10 @@ static void replay_source_tick(void *data, float seconds)
 
 			context->audio.frames = peek_audio.frames;
 
-			if(context->speed_percent != 100)
+			if(context->speed_percent != 100.0f)
 			{
-				context->audio.timestamp = context->start_timestamp + (peek_audio.timestamp - context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
-				context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100;
+				context->audio.timestamp = context->start_timestamp + (peek_audio.timestamp - context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
+				context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100.0;
 			}else
 			{
 				context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->current_replay.first_frame_timestamp;
@@ -2426,7 +2428,7 @@ static void replay_source_tick(void *data, float seconds)
 				break;
 			}
 			peek_audio = context->current_replay.audio_frames[context->audio_frame_position];
-			audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100 / context->speed_percent;
+			audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
 		}
 	}
 	pthread_mutex_unlock(&context->video_mutex);
@@ -2540,8 +2542,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
 	obs_enum_scenes(EnumScenes, prop);
 
-	obs_properties_add_int_slider(props, SETTING_SPEED,
-			obs_module_text("SpeedPercentage"), 1, 200, 1);
+	obs_properties_add_float_slider(props, SETTING_SPEED,"Speed percentage", SETTING_SPEED_MIN, SETTING_SPEED_MAX, 1.0);
 	obs_properties_add_bool(props, SETTING_BACKWARD,"Backwards");
 
 	obs_properties_add_path(props,SETTING_DIRECTORY,"Directory",OBS_PATH_DIRECTORY,NULL,NULL);
