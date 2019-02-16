@@ -92,6 +92,8 @@ struct replay_source {
 	obs_hotkey_id reverse_hotkey;
 	obs_hotkey_id forward_hotkey;
 	obs_hotkey_id backward_hotkey;
+	obs_hotkey_id forward_or_faster_hotkey;
+	obs_hotkey_id backward_or_faster_hotkey;
 	obs_hotkey_id save_hotkey;
 	obs_hotkey_id enable_hotkey;
 	obs_hotkey_id disable_hotkey;
@@ -147,6 +149,7 @@ struct replay_source {
 	char *text_source_name;
 	char *text_format;
 	bool sound_trigger;
+	bool filter_loaded;
 };
 
 static void replace_text(struct dstr *str, size_t pos, size_t len,
@@ -235,7 +238,7 @@ static void replay_update_text(struct replay_source* c)
 					time = c->pause_timestamp - c->start_timestamp;
 				}else
 				{
-					time = os_gettime_ns() - c->start_timestamp;
+					time = obs_get_video_frame_time() - c->start_timestamp;
 				}
 				if(c->speed_percent != 100.0f)
 				{
@@ -408,31 +411,31 @@ static void replay_forward_hotkey(void *data, obs_hotkey_id id,
 
 	struct replay_source *c = data;
 
-	if(pressed){
-		const int64_t time = obs_get_video_frame_time();
-		if(c->pause_timestamp)
-		{
-			c->start_timestamp += time - c->pause_timestamp;
-			c->pause_timestamp = 0;
-		}
-		c->play = true;
-		if(c->end){
-			c->end = false;
-			c->video_frame_position = 0;
-			c->start_timestamp = os_gettime_ns();
-			c->backward = false;
-		}else if(c->backward)
-		{
-			c->backward = false;
+	if(!pressed)
+		return;
+	const int64_t time = obs_get_video_frame_time();
+	if(c->pause_timestamp)
+	{
+		c->start_timestamp += time - c->pause_timestamp;
+		c->pause_timestamp = 0;
+	}
+	c->play = true;
+	if(c->end){
+		c->end = false;
+		c->video_frame_position = 0;
+		c->start_timestamp = obs_get_video_frame_time();
+		c->backward = false;
+	}else if(c->backward)
+	{
+		c->backward = false;
 		
-			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
-			int64_t play_duration = time - c->start_timestamp;
-			if(play_duration > duration)
-			{
-				play_duration = duration;
-			}
-			c->start_timestamp = time - duration + play_duration;
+		const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
+		int64_t play_duration = time - c->start_timestamp;
+		if(play_duration > duration)
+		{
+			play_duration = duration;
 		}
+		c->start_timestamp = time - duration + play_duration;
 	}
 }
 
@@ -444,32 +447,32 @@ static void replay_backward_hotkey(void *data, obs_hotkey_id id,
 
 	struct replay_source *c = data;
 
-	if(pressed){
-		const int64_t time = obs_get_video_frame_time();
-		if(c->pause_timestamp)
-		{
-			c->start_timestamp += time - c->pause_timestamp;
-			c->pause_timestamp = 0;
-		}
-		c->play = true;
-		if(c->end || c->video_frame_position == 0){
-			c->end = false;
-			if(c->current_replay.video_frame_count)
-				c->video_frame_position = c->current_replay.video_frame_count-1;
-			c->start_timestamp = os_gettime_ns();
-			c->backward = true;
-		}else if(!c->backward)
-		{
-			c->backward = true;
+	if(!pressed)
+		return;
+	const int64_t time = obs_get_video_frame_time();
+	if(c->pause_timestamp)
+	{
+		c->start_timestamp += time - c->pause_timestamp;
+		c->pause_timestamp = 0;
+	}
+	c->play = true;
+	if(c->end || c->video_frame_position == 0){
+		c->end = false;
+		if(c->current_replay.video_frame_count)
+			c->video_frame_position = c->current_replay.video_frame_count-1;
+		c->start_timestamp = obs_get_video_frame_time();
+		c->backward = true;
+	}else if(!c->backward)
+	{
+		c->backward = true;
 
-			const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
-			int64_t play_duration = time - c->start_timestamp;
-			if(play_duration > duration)
-			{
-				play_duration = duration;
-			}
-			c->start_timestamp = time - duration + play_duration;
+		const int64_t duration = ((int64_t)c->current_replay.last_frame_timestamp - (int64_t)c->current_replay.first_frame_timestamp) * 100.0 / c->speed_percent;
+		int64_t play_duration = time - c->start_timestamp;
+		if(play_duration > duration)
+		{
+			play_duration = duration;
 		}
+		c->start_timestamp = time - duration + play_duration;
 	}
 }
 
@@ -501,7 +504,7 @@ static void replay_update_position(struct replay_source *c, bool lock){
 	memcpy(&c->current_replay, circlebuf_data(&c->replays, c->replay_position*sizeof c->current_replay), sizeof c->current_replay);
 	c->video_frame_position = 0;
 	c->audio_frame_position = 0;
-	c->start_timestamp = os_gettime_ns();
+	c->start_timestamp = obs_get_video_frame_time();
 	c->backward = c->backward_start;
 	if(!c->backward && c->current_replay.trim_front != 0){
 		if(c->speed_percent == 100.0f){
@@ -583,10 +586,10 @@ static void replay_purge_replays(struct replay_source *context)
 }
 void replay_retrieve(struct replay_source *c);
 
-static void replay_trigger_threshold(void *data)
+void replay_trigger_threshold(void *data)
 {
 	struct replay_source *context = data;
-	const uint64_t os_time = os_gettime_ns();
+	const uint64_t os_time = obs_get_video_frame_time();
 	uint64_t duration = context->current_replay.duration;
 	if(context->speed_percent < 100.f)
 		 duration = duration * 100.0 / context->speed_percent;
@@ -597,7 +600,7 @@ static void replay_trigger_threshold(void *data)
 
 	if(context->retrieve_delay > 0)
 	{
-		context->retrieve_timestamp = os_gettime_ns() + context->retrieve_delay;
+		context->retrieve_timestamp = obs_get_video_frame_time() + context->retrieve_delay;
 	}else{
 		replay_retrieve(context);
 	}
@@ -705,7 +708,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 
 			((struct replay_filter*)context->source_filter->context.data)->threshold_data = data;
 			((struct replay_filter*)context->source_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
-
+			context->filter_loaded = true;
 			obs_source_release(s);
 		}
 		s = obs_get_source_by_name(context->source_audio_name);
@@ -726,6 +729,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			}
 			((struct replay_filter*)context->source_audio_filter->context.data)->threshold_data = data;
 			((struct replay_filter*)context->source_audio_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+			context->filter_loaded = true;
 			obs_source_release(s);
 		}
 	}
@@ -820,11 +824,12 @@ static void replay_source_active(void *data)
 	struct replay_source *context = data;
 	if(context->visibility_action == VISIBILITY_ACTION_PAUSE || context->visibility_action == VISIBILITY_ACTION_CONTINUE)
 	{
-		if(!context->play){
+		if(!context->play && !context->end){
 			context->play = true;
 			if(context->pause_timestamp)
 			{
 				context->start_timestamp += obs_get_video_frame_time() - context->pause_timestamp;
+				context->pause_timestamp = 0;
 			}
 		}
 	}
@@ -1126,7 +1131,7 @@ void replay_save(struct replay_source *context)
 	obs_data_release(settings);
 
 	context->video_save_position = 0;
-	context->start_save_timestamp = os_gettime_ns();
+	context->start_save_timestamp = obs_get_video_frame_time();
 
 	struct obs_source_frame* frame = context->saving_replay.video_frames[0];
 	struct video_frame output_frame;
@@ -1285,7 +1290,7 @@ static void replay_hotkey(void *data, obs_hotkey_id id,
 
 	if(c->retrieve_delay > 0)
 	{
-		c->retrieve_timestamp = os_gettime_ns() + c->retrieve_delay;
+		c->retrieve_timestamp = obs_get_video_frame_time() + c->retrieve_delay;
 	}else{
 		replay_retrieve(c);
 	}
@@ -1623,6 +1628,45 @@ static void replay_double_speed_hotkey(void *data, obs_hotkey_id id,
 	update_speed(c, 200.0f);
 }
 
+static void replay_forward_or_faster_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+
+	if(c->backward)
+	{
+		replay_forward_hotkey(data,id,hotkey,pressed);
+		replay_normal_speed_hotkey(data,id,hotkey,pressed);
+		return;
+	}
+	replay_normal_or_faster_hotkey(data,id,hotkey,pressed);
+}
+
+static void replay_backward_or_faster_hotkey(void *data, obs_hotkey_id id,
+		obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if(!pressed)
+		return;
+	if(!c->backward)
+	{
+		replay_backward_hotkey(data,id,hotkey,pressed);
+		replay_normal_speed_hotkey(data,id,hotkey,pressed);
+		return;
+	}
+	replay_normal_or_faster_hotkey(data,id,hotkey,pressed);
+}
+
 static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
 		obs_hotkey_t *hotkey, bool pressed)
 {
@@ -1841,6 +1885,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 			obs_module_text("Backward"),
 			replay_backward_hotkey, context);
 
+	context->forward_or_faster_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.ForwardOrFaster",
+			"Forward or faster",
+			replay_forward_or_faster_hotkey, context);
+
+	context->backward_or_faster_hotkey = obs_hotkey_register_source(source,
+			"ReplaySource.BackwardOrFaster",
+			"Backward or faster",
+			replay_backward_or_faster_hotkey, context);
+
 	context->disable_hotkey = obs_hotkey_register_source(source,
 			"ReplaySource.Disable",
 			obs_module_text("Disable"),
@@ -2056,12 +2110,38 @@ static void replay_source_tick(void *data, float seconds)
 {
 	struct replay_source *context = data;
 
-	const uint64_t os_timestamp = os_gettime_ns();
+	const uint64_t os_timestamp = obs_get_video_frame_time();
 
 	if(context->retrieve_timestamp && context->retrieve_timestamp < os_timestamp)
 	{
 		context->retrieve_timestamp = 0;
 		replay_retrieve(context);
+	}
+	if(!context->filter_loaded)
+	{
+		if(context->source_name){
+			obs_source_t *s = obs_get_source_by_name(context->source_name);
+			if(s)
+			{
+				obs_data_t* settings = obs_source_get_settings(context->source);
+				replay_source_update(data, settings);
+				obs_data_release(settings);
+				obs_source_release(s);
+				return;
+			}
+		}
+		if(context->source_audio_name){
+			obs_source_t *s = obs_get_source_by_name(context->source_audio_name);
+			if(s)
+			{
+				obs_data_t* settings = obs_source_get_settings(context->source);
+				replay_source_update(data, settings);
+				obs_data_release(settings);
+				obs_source_release(s);
+				return;
+			}
+		}
+		return;
 	}
 
 	if(context->saving_status == SAVING_STATUS_STARTING){

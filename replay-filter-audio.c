@@ -28,6 +28,7 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	filter->duration = new_duration;
 	const double db = obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
 	filter->threshold = db_to_mul((float)db);
+	
 }
 
 
@@ -38,6 +39,7 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 	struct replay_filter *context = bzalloc(sizeof(struct replay_filter));
 	context->src = source;
 	pthread_mutex_init(&context->mutex, NULL);
+	context->last_check = obs_get_video_frame_time();
 
 	replay_filter_update(context, settings);
 

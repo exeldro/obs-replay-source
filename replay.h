@@ -24,7 +24,7 @@ struct replay_filter {
 	uint32_t video_linesize;
 	video_t* video_output;
 
-	uint64_t                       duration;
+	uint64_t duration;
 	obs_source_t *src;
 	pthread_mutex_t    mutex;
 	int64_t timing_adjust;
@@ -32,6 +32,7 @@ struct replay_filter {
 	float threshold;
 	void (*trigger_threshold)(void *data);
 	void *threshold_data;
+	uint64_t last_check;
 };
 
 void obs_source_frame_copy(struct obs_source_frame * dst,const struct obs_source_frame *src);
@@ -41,6 +42,8 @@ void free_video_data(struct replay_filter *filter);
 void free_audio_data(struct replay_filter *filter);
 void obs_enum_scenes(bool (*enum_proc)(void*, obs_source_t*),void *param);
 obs_properties_t *replay_filter_properties(void *unused);
+void replay_trigger_threshold(void *data);
+void replay_filter_check(struct replay_filter* filter);
 
 #define REPLAY_FILTER_ID               "replay_filter"
 #define TEXT_FILTER_NAME               "Replay filter"

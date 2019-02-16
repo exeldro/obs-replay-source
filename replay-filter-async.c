@@ -36,6 +36,7 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 	struct replay_filter *context = bzalloc(sizeof(struct replay_filter));
 	context->src = source;
 	pthread_mutex_init(&context->mutex, NULL);
+	context->last_check = obs_get_video_frame_time();
 
 	replay_filter_update(context, settings);
 
@@ -80,7 +81,7 @@ static struct obs_source_frame *replay_filter_video(void *data,
 	uint64_t last_timestamp = 0;
 
 	obs_source_t* target = filter->internal_frames ? obs_filter_get_parent(filter->src) : NULL;
-	const uint64_t os_time = os_gettime_ns();
+	const uint64_t os_time = obs_get_video_frame_time();
 	struct obs_source_frame *new_frame = NULL;
 
 	pthread_mutex_lock(&filter->mutex);
@@ -162,6 +163,7 @@ static struct obs_source_frame *replay_filter_video(void *data,
 		}
 	}
 	pthread_mutex_unlock(&filter->mutex);
+	replay_filter_check(filter);
 	return frame;
 }
 

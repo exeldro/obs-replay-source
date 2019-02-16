@@ -86,6 +86,7 @@ struct obs_audio_data *replay_filter_audio(void *data,
 		cur_duration = adjusted_time - cached.timestamp;
 	}
 	pthread_mutex_unlock(&filter->mutex);
+	replay_filter_check(filter);
 	return audio;
 }
 
@@ -249,4 +250,28 @@ const char *obs_module_description(void)
 const char *obs_module_author(void)
 {
 	return "Exeldro";
+}
+
+void replay_filter_check(struct replay_filter* filter)
+{
+	if(filter->last_check && filter->last_check + SEC_TO_NSEC > obs_get_video_frame_time())
+		return;
+	filter->last_check = obs_get_video_frame_time();
+	obs_source_t * s = obs_get_source_by_name(obs_source_get_name(filter->src));
+	if(s)
+	{
+		if(!filter->trigger_threshold)
+		{
+			obs_data_t* settings= obs_source_get_settings(s);
+			if(obs_data_get_bool(settings, SETTING_SOUND_TRIGGER)){
+				filter->threshold_data = (struct replay_source*)s->context.data;
+				filter->trigger_threshold = replay_trigger_threshold;
+			}
+			obs_data_release(settings);
+		}
+		obs_source_release(s);
+	}else
+	{
+		obs_source_filter_remove(obs_filter_get_parent(filter->src),filter->src);
+	}
 }

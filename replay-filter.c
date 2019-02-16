@@ -136,7 +136,7 @@ void replay_filter_offscreen_render(void* data, uint32_t cx, uint32_t cy)
 
 		struct video_frame output_frame;
 		if (filter->video_output && video_output_lock_frame(filter->video_output,
-			&output_frame, 1, os_gettime_ns()))
+			&output_frame, 1, obs_get_video_frame_time()))
 		{
 			if (filter->video_data) {
 				gs_stagesurface_unmap(filter->stagesurface);
@@ -179,6 +179,22 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	filter->duration = new_duration;
 
 	obs_add_main_render_callback(replay_filter_offscreen_render, filter);
+
+	replay_filter_check(filter);
+
+	obs_source_t * s = obs_get_source_by_name(obs_source_get_name(filter->src));
+	if(s)
+	{
+		if(obs_data_get_bool(settings, SETTING_SOUND_TRIGGER) && !filter->trigger_threshold)
+		{
+			filter->threshold_data = (struct replay_source*)s->context.data;
+			filter->trigger_threshold = replay_trigger_threshold;
+		}
+		obs_source_release(s);
+	}else
+	{
+		obs_source_filter_remove(obs_filter_get_parent(filter->src),filter->src);
+	}
 }
 
 
@@ -194,6 +210,7 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 	context->video_data = NULL;
 	obs_get_video_info(&context->ovi);
 	obs_get_audio_info(&context->oai);
+	context->last_check = obs_get_video_frame_time();
 
 
 	replay_filter_update(context, settings);
@@ -249,6 +266,7 @@ void replay_filter_tick(void* data, float seconds)
 {
 	struct replay_filter *filter = data;
 	obs_get_video_info(&filter->ovi);
+	replay_filter_check(filter);
 }
 
 void replay_filter_video_render(void* data, gs_effect_t* effect)
