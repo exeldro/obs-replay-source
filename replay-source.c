@@ -150,6 +150,7 @@ struct replay_source {
 	char *text_format;
 	bool sound_trigger;
 	bool filter_loaded;
+	bool free_after_save;
 };
 
 static void replace_text(struct dstr *str, size_t pos, size_t len,
@@ -539,31 +540,40 @@ static void replay_update_position(struct replay_source *c, bool lock){
 	replay_update_text(c);
 }
 
-static void replay_free_replay(struct replay* replay)
+static void replay_free_replay(struct replay* replay, struct replay_source *context)
 {
-		for(uint64_t i = 0; i < replay->video_frame_count; i++)
-		{
-			struct obs_source_frame* frame = replay->video_frames[i];
-			if (frame && os_atomic_dec_long(&frame->refs) <= 0) {
-				obs_source_frame_destroy(frame);
-				frame = NULL;
-			}
+	if(replay == &context->saving_replay)
+	{
+		context->free_after_save = false;
+	}
+	else if(replay->video_frames == context->saving_replay.video_frames && context->saving_status != SAVING_STATUS_NONE)
+	{
+		context->free_after_save = true;
+		return;
+	}
+	for(uint64_t i = 0; i < replay->video_frame_count; i++)
+	{
+		struct obs_source_frame* frame = replay->video_frames[i];
+		if (frame && os_atomic_dec_long(&frame->refs) <= 0) {
+			obs_source_frame_destroy(frame);
+			frame = NULL;
 		}
-		replay->video_frame_count = 0;
-		if(replay->video_frames){
-			bfree(replay->video_frames);
-			replay->video_frames = NULL;
-		}
+	}
+	replay->video_frame_count = 0;
+	if(replay->video_frames){
+		bfree(replay->video_frames);
+		replay->video_frames = NULL;
+	}
 
-		for(uint64_t i = 0; i < replay->audio_frame_count; i++)
-		{
-			free_audio_packet(&replay->audio_frames[i]);
-		}
-		replay->audio_frame_count = 0;
-		if(replay->audio_frames){
-			bfree(replay->audio_frames);
-			replay->audio_frames = NULL;
-		}
+	for(uint64_t i = 0; i < replay->audio_frame_count; i++)
+	{
+		free_audio_packet(&replay->audio_frames[i]);
+	}
+	replay->audio_frame_count = 0;
+	if(replay->audio_frames){
+		bfree(replay->audio_frames);
+		replay->audio_frames = NULL;
+	}
 }
 static void replay_purge_replays(struct replay_source *context)
 {
@@ -578,7 +588,7 @@ static void replay_purge_replays(struct replay_source *context)
 		{
 			struct replay old_replay;
 			circlebuf_pop_front(&context->replays, &old_replay,  sizeof context->current_replay);
-			replay_free_replay(&old_replay);
+			replay_free_replay(&old_replay, context);
 			context->replay_position--;
 		}
 		pthread_mutex_unlock(&context->replay_mutex);
@@ -1062,6 +1072,10 @@ void replay_save(struct replay_source *context)
 		if(r != VIDEO_OUTPUT_SUCCESS){
 			context->saving_status = SAVING_STATUS_NONE;
 			pthread_mutex_unlock(&context->video_mutex);
+			if(context->free_after_save)
+			{
+				replay_free_replay(&context->saving_replay, context);
+			}
 			return;
 		}
 
@@ -1103,6 +1117,10 @@ void replay_save(struct replay_source *context)
 		if(r != AUDIO_OUTPUT_SUCCESS){
 			context->saving_status = SAVING_STATUS_NONE;
 			pthread_mutex_unlock(&context->video_mutex);
+			if(context->free_after_save)
+			{
+				replay_free_replay(&context->saving_replay, context);
+			}
 			return;
 		}
 	}
@@ -1145,6 +1163,10 @@ void replay_save(struct replay_source *context)
 	{
 		const char * error = obs_output_get_last_error(context->fileOutput);
 		context->saving_status = SAVING_STATUS_NONE;
+		if(context->free_after_save)
+		{
+			replay_free_replay(&context->saving_replay, context);
+		}
 		return;
 	}
 	context->saving_status = SAVING_STATUS_SAVING;
@@ -1463,7 +1485,7 @@ static void replay_remove_hotkey(void *data, obs_hotkey_id id,
 	}
 	pthread_mutex_unlock(&c->replay_mutex);
 	replay_update_position(c, true);
-	replay_free_replay(&removed_replay);
+	replay_free_replay(&removed_replay, c);
 }
 
 static void replay_clear_hotkey(void *data, obs_hotkey_id id,
@@ -1491,7 +1513,7 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id,
 	{
 		struct replay replay;
 		circlebuf_pop_front(&c->replays, &replay, sizeof replay);
-		replay_free_replay(&replay);
+		replay_free_replay(&replay, c);
 	}
 	pthread_mutex_unlock(&c->replay_mutex);
 	replay_update_text(c);
@@ -1985,7 +2007,7 @@ static void replay_source_destroy(void *data)
 	while(context->replays.size)
 	{
 		circlebuf_pop_front(&context->replays, &context->current_replay, sizeof context->current_replay);
-		replay_free_replay(&context->current_replay);
+		replay_free_replay(&context->current_replay, context);
 	}
 	circlebuf_free(&context->replays);
 	pthread_mutex_unlock(&context->replay_mutex);
@@ -2152,6 +2174,10 @@ static void replay_source_tick(void *data, float seconds)
 		{
 			const char* error = obs_output_get_last_error(context->fileOutput);
 			context->saving_status = SAVING_STATUS_NONE;
+			if(context->free_after_save)
+			{
+				replay_free_replay(&context->saving_replay, context);
+			}
 		}else if(context->video_save_position >= context->saving_replay.video_frame_count){
 			context->saving_status = SAVING_STATUS_STOPPING;
 			obs_output_stop(context->fileOutput);
@@ -2201,6 +2227,10 @@ static void replay_source_tick(void *data, float seconds)
 	{
 		if(!context->fileOutput || !obs_output_active(context->fileOutput)){
 			context->saving_status = SAVING_STATUS_NONE;
+			if(context->free_after_save)
+			{
+				replay_free_replay(&context->saving_replay, context);
+			}
 		}else{
 
 			if (os_timestamp - context->start_save_timestamp > context->saving_replay.last_frame_timestamp - context->saving_replay.first_frame_timestamp)
