@@ -695,7 +695,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 	context->sound_trigger = obs_data_get_bool(settings, SETTING_SOUND_TRIGGER);
 	if(!context->disabled){
 		
-		obs_source_t *s = obs_get_source_by_name(context->source_name);
+		obs_source_t *s = NULL;
+		if(strcmp(context->source_name, obs_source_get_name(context->source)) != 0){
+			s = obs_get_source_by_name(context->source_name);
+		}
 		if(s){
 			context->source_filter = NULL;
 			obs_source_enum_filters(s, EnumFilter, data);
@@ -721,7 +724,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			context->filter_loaded = true;
 			obs_source_release(s);
 		}
-		s = obs_get_source_by_name(context->source_audio_name);
+		s = NULL;
+		if(strcmp(context->source_audio_name, obs_source_get_name(context->source)) != 0){
+			s = obs_get_source_by_name(context->source_audio_name);
+		}
 		if(s){
 			context->source_audio_filter = NULL;
 			obs_source_enum_filters(s, EnumAudioVideoFilter, data);
@@ -2119,11 +2125,25 @@ void replay_source_end_action(struct replay_source* context)
 	}
 	if(finish && context->next_scene_name && context->active && !context->next_scene_disabled)
 	{
-		obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
-		if(s)
+		obs_source_t *current = obs_frontend_get_current_scene();
+		if(current){
+			if(strcmp(obs_source_get_name(current), context->next_scene_name) != 0){ 
+				obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
+				if(s)
+				{
+					obs_frontend_set_current_scene(s);
+					obs_source_release(s);
+				}
+			}
+			obs_source_release(current);
+		}else
 		{
-			obs_frontend_set_current_scene(s);
-			obs_source_release(s);
+			obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
+			if(s)
+			{
+				obs_frontend_set_current_scene(s);
+				obs_source_release(s);
+			}
 		}
 	}
 }
