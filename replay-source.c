@@ -2055,6 +2055,13 @@ static void replay_output_frame(struct replay_source* context, struct obs_source
 	replay_update_text(context);
 	replay_update_progress_crop(context, t);
 }
+static void *update_scene_thread(void *data)
+{
+	obs_source_t *scene = data;
+	obs_frontend_set_current_scene(scene);
+	obs_source_release(scene);
+	return NULL;
+}
 
 void replay_source_end_action(struct replay_source* context)
 {
@@ -2127,12 +2134,13 @@ void replay_source_end_action(struct replay_source* context)
 	{
 		obs_source_t *current = obs_frontend_get_current_scene();
 		if(current){
-			if(strcmp(obs_source_get_name(current), context->next_scene_name) != 0){ 
+			const char* current_name = obs_source_get_name(current);
+			if(strcmp(current_name, context->next_scene_name) != 0){ 
 				obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
 				if(s)
 				{
-					obs_frontend_set_current_scene(s);
-					obs_source_release(s);
+					pthread_t thread;
+					pthread_create(&thread, NULL, update_scene_thread, s);
 				}
 			}
 			obs_source_release(current);
@@ -2141,8 +2149,8 @@ void replay_source_end_action(struct replay_source* context)
 			obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
 			if(s)
 			{
-				obs_frontend_set_current_scene(s);
-				obs_source_release(s);
+				pthread_t thread;
+				pthread_create(&thread, NULL, update_scene_thread, s);
 			}
 		}
 	}
@@ -2673,12 +2681,14 @@ static obs_properties_t *replay_source_properties(void *data)
 
 	obs_properties_t *props = obs_properties_create();
 	obs_property_t* prop = obs_properties_add_list(props,SETTING_SOURCE,TEXT_SOURCE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop,"","");
 	obs_enum_sources(EnumVideoSources, prop);
 	obs_enum_scenes(EnumVideoSources, prop);
 	obs_property_set_modified_callback(prop, replay_video_source_modified);
 	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES, "Capture internal frames");
 
 	prop = obs_properties_add_list(props,SETTING_SOURCE_AUDIO,TEXT_SOURCE_AUDIO, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop,"","");
 	obs_enum_sources(EnumAudioSources, prop);
 
 	obs_properties_add_int(props,SETTING_DURATION,TEXT_DURATION,SETTING_DURATION_MIN,SETTING_DURATION_MAX,1000);
@@ -2706,6 +2716,7 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_property_list_add_int(prop, "Reverse after all", END_ACTION_REVERSE_ALL);
 
 	prop = obs_properties_add_list(props,SETTING_NEXT_SCENE,TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop,"","");
 	obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_float_slider(props, SETTING_SPEED,"Speed percentage", SETTING_SPEED_MIN, SETTING_SPEED_MAX, 1.0);
@@ -2716,9 +2727,11 @@ static obs_properties_t *replay_source_properties(void *data)
 	obs_properties_add_bool(props,SETTING_LOSSLESS,"Lossless");
 
 	prop = obs_properties_add_list(props,SETTING_PROGRESS_SOURCE,"Progress crop source", OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop,"","");
 	obs_enum_sources(EnumVideoSources, prop);
 
 	prop = obs_properties_add_list(props,SETTING_TEXT_SOURCE,"Text source", OBS_COMBO_TYPE_EDITABLE,OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop,"","");
 	obs_enum_sources(EnumTextSources, prop);
 	obs_property_set_modified_callback(prop, replay_text_source_modified);
 
