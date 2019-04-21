@@ -200,18 +200,6 @@ void obs_source_frame_copy(struct obs_source_frame * dst,const struct obs_source
 	copy_frame_data(dst, src);
 }
 
-void obs_enum_scenes(bool (*enum_proc)(void*, obs_source_t*), void *param)
-{
-	struct obs_frontend_source_list l ={NULL,0,0};
-	obs_frontend_get_scenes(&l);
-	for (size_t i = 0; i < l.sources.num; i++) {
-		if(!enum_proc(param, l.sources.array[i]))
-			break;
-	}
-	obs_frontend_source_list_free(&l);
-}
-
-
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("replay-source", "en-US")
 

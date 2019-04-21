@@ -40,7 +40,6 @@ void free_audio_packet(struct obs_audio_data *audio);
 struct obs_audio_data *replay_filter_audio(void *data,struct obs_audio_data *audio);
 void free_video_data(struct replay_filter *filter);
 void free_audio_data(struct replay_filter *filter);
-void obs_enum_scenes(bool (*enum_proc)(void*, obs_source_t*),void *param);
 obs_properties_t *replay_filter_properties(void *unused);
 void replay_trigger_threshold(void *data);
 void replay_filter_check(struct replay_filter* filter);
