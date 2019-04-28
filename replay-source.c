@@ -49,6 +49,7 @@ struct replay
 	struct obs_source_frame**      video_frames;
 	uint64_t                       video_frame_count;
 	struct obs_audio_data*         audio_frames;
+	struct audio_convert_info      oai;
 	uint64_t                       audio_frame_count;
 	uint64_t                       first_frame_timestamp;
 	uint64_t                       last_frame_timestamp;
@@ -700,28 +701,39 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			s = obs_get_source_by_name(context->source_name);
 		}
 		if(s){
-			context->source_filter = NULL;
-			obs_source_enum_filters(s, EnumFilter, data);
-			if(!context->source_filter)
+			if(strcmp(obs_source_get_id(s),"dshow_input_replay") == 0)
 			{
-				if((obs_source_get_output_flags(s) & OBS_SOURCE_ASYNC) == OBS_SOURCE_ASYNC)
-				{
-					context->source_filter = obs_source_create_private(REPLAY_FILTER_ASYNC_ID,obs_source_get_name(context->source), settings);
-				}
-				else
-				{
-					context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
-				}
-				if(context->source_filter){
-					obs_source_filter_add(s,context->source_filter);
+				if(s->context.data){
+					obs_source_update(s, settings);
+					((struct replay_filter*)s->context.data)->threshold_data = data;
+					((struct replay_filter*)s->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					context->filter_loaded = true;
 				}
 			}else{
-				obs_source_update(context->source_filter, settings);
+				context->source_filter = NULL;
+				obs_source_enum_filters(s, EnumFilter, data);
+				if(!context->source_filter)
+				{
+					if((obs_source_get_output_flags(s) & OBS_SOURCE_ASYNC) == OBS_SOURCE_ASYNC)
+					{
+						context->source_filter = obs_source_create_private(REPLAY_FILTER_ASYNC_ID,obs_source_get_name(context->source), settings);
+					}
+					else
+					{
+						context->source_filter = obs_source_create_private(REPLAY_FILTER_ID,obs_source_get_name(context->source), settings);
+					}
+					if(context->source_filter){
+						obs_source_filter_add(s,context->source_filter);
+					}
+				}else if(context->source_filter->context.data){
+					obs_source_update(context->source_filter, settings);
+				}
+				if(context->source_filter->context.data){
+					((struct replay_filter*)context->source_filter->context.data)->threshold_data = data;
+					((struct replay_filter*)context->source_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					context->filter_loaded = true;
+				}
 			}
-
-			((struct replay_filter*)context->source_filter->context.data)->threshold_data = data;
-			((struct replay_filter*)context->source_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
-			context->filter_loaded = true;
 			obs_source_release(s);
 		}
 		s = NULL;
@@ -729,23 +741,35 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			s = obs_get_source_by_name(context->source_audio_name);
 		}
 		if(s){
-			context->source_audio_filter = NULL;
-			obs_source_enum_filters(s, EnumAudioVideoFilter, data);
-			if(!context->source_audio_filter)
+			if(strcmp(obs_source_get_id(s),"dshow_input_replay") == 0)
 			{
-				if((obs_source_get_output_flags(s) & OBS_SOURCE_AUDIO) != 0)
-				{
-					context->source_audio_filter = obs_source_create_private(REPLAY_FILTER_AUDIO_ID,obs_source_get_name(context->source), settings);
-				}
-				if(context->source_audio_filter){
-					obs_source_filter_add(s,context->source_audio_filter);
+				if(s->context.data){
+					obs_source_update(s, settings);
+					((struct replay_filter*)s->context.data)->threshold_data = data;
+					((struct replay_filter*)s->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					context->filter_loaded = true;
 				}
 			}else{
-				obs_source_update(context->source_audio_filter, settings);
+				context->source_audio_filter = NULL;
+				obs_source_enum_filters(s, EnumAudioVideoFilter, data);
+				if(!context->source_audio_filter)
+				{
+					if((obs_source_get_output_flags(s) & OBS_SOURCE_AUDIO) != 0)
+					{
+						context->source_audio_filter = obs_source_create_private(REPLAY_FILTER_AUDIO_ID,obs_source_get_name(context->source), settings);
+					}
+					if(context->source_audio_filter){
+						obs_source_filter_add(s,context->source_audio_filter);
+					}
+				}else if(context->source_audio_filter->context.data){
+					obs_source_update(context->source_audio_filter, settings);
+				}
+				if(context->source_audio_filter->context.data){
+					((struct replay_filter*)context->source_audio_filter->context.data)->threshold_data = data;
+					((struct replay_filter*)context->source_audio_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					context->filter_loaded = true;
+				}
 			}
-			((struct replay_filter*)context->source_audio_filter->context.data)->threshold_data = data;
-			((struct replay_filter*)context->source_audio_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
-			context->filter_loaded = true;
 			obs_source_release(s);
 		}
 	}
@@ -1110,13 +1134,11 @@ void replay_save(struct replay_source *context)
 	}
 	if(!context->audio_t)
 	{
-		audio_t* t = obs_get_audio();
-		const struct audio_output_info* oai = audio_output_get_info(t);
 		struct audio_output_info oi ;
 		oi.name = "ReplayAudio";
-		oi.speakers = oai->speakers;
-		oi.samples_per_sec = oai->samples_per_sec;
-		oi.format = oai->format;
+		oi.speakers = context->saving_replay.oai.speakers;
+		oi.samples_per_sec = context->saving_replay.oai.samples_per_sec;
+		oi.format = context->saving_replay.oai.format;
 		oi.input_param = context;
 		oi.input_callback = audio_input_callback;
 		const int r = audio_output_open(&context->audio_t, &oi);
@@ -1183,17 +1205,34 @@ static void replay_retrieve(struct replay_source *c)
 
 	obs_source_t *s = obs_get_source_by_name(c->source_name);
 	c->source_filter = NULL;
+	bool dswow_video = false;
+	bool dswow_audio = false;
 	if(s){
-		obs_source_enum_filters(s, EnumFilter, c);
+		if(strcmp(obs_source_get_id(s),"dshow_input_replay")== 0)
+		{
+			dswow_video = true;
+		}else{
+			obs_source_enum_filters(s, EnumFilter, c);
+		}
 	}
 	obs_source_t *as = obs_get_source_by_name(c->source_audio_name);
 	c->source_audio_filter = NULL;
 	if(as){
+		if(strcmp(obs_source_get_id(s),"dshow_input_replay")== 0)
+		{
+			dswow_audio = true;
+		}else{
+			obs_source_enum_filters(s, EnumFilter, c);
+		}
 		obs_source_enum_filters(as, EnumAudioVideoFilter, c);
 	}
 
 	struct replay_filter* vf = c->source_filter?c->source_filter->context.data:NULL;
+	if(dswow_video)
+		vf = s->context.data;
 	struct replay_filter* af = c->source_audio_filter?c->source_audio_filter->context.data:vf;
+	if(dswow_audio)
+		af = s->context.data;
 	if(vf && vf->video_frames.size == 0)
 		vf = NULL;
 	if(af && af->audio_frames.size == 0)
@@ -1236,8 +1275,6 @@ static void replay_retrieve(struct replay_source *c)
 		new_replay.video_frame_count = 0;
 	}
 	if(af){
-		struct obs_audio_info info;
-		obs_get_audio_info(&info);
 		pthread_mutex_lock(&af->mutex);
 		struct obs_audio_data audio;
 		if (!vf && af->audio_frames.size)
@@ -1246,6 +1283,7 @@ static void replay_retrieve(struct replay_source *c)
 			new_replay.first_frame_timestamp = audio.timestamp;
 			new_replay.last_frame_timestamp = audio.timestamp;
 		}
+		new_replay.oai = af->oai;
 		new_replay.audio_frame_count = af->audio_frames.size/sizeof(struct obs_audio_data);
 		new_replay.audio_frames = bzalloc(new_replay.audio_frame_count * sizeof(struct obs_audio_data));
 		for(uint64_t i = 0; i < new_replay.audio_frame_count; i++)
@@ -2429,8 +2467,6 @@ static void replay_source_tick(void *data, float seconds)
 			if(context->current_replay.audio_frame_count > 1){
 				pthread_mutex_lock(&context->audio_mutex);
 				struct obs_audio_data peek_audio = context->current_replay.audio_frames[context->audio_frame_position];
-				struct obs_audio_info info;
-				obs_get_audio_info(&info);
 				const int64_t frame_duration = (context->current_replay.last_frame_timestamp - context->current_replay.first_frame_timestamp)/context->current_replay.video_frame_count;
 				//const uint64_t duration = audio_frames_to_ns(info.samples_per_sec, peek_audio.frames);
 				int64_t audio_duration = ((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent;
@@ -2442,19 +2478,19 @@ static void replay_source_tick(void *data, float seconds)
 						if(context->speed_percent != 100.0f)
 						{
 							context->audio.timestamp = context->start_timestamp + (((int64_t)peek_audio.timestamp - (int64_t)context->current_replay.first_frame_timestamp) * 100.0 / context->speed_percent);
-							context->audio.samples_per_sec = info.samples_per_sec * context->speed_percent / 100.0;
+							context->audio.samples_per_sec = context->current_replay.oai.samples_per_sec * context->speed_percent / 100.0;
 						}else
 						{
 							context->audio.timestamp = peek_audio.timestamp + context->start_timestamp - context->current_replay.first_frame_timestamp;
-							context->audio.samples_per_sec = info.samples_per_sec;
+							context->audio.samples_per_sec = context->current_replay.oai.samples_per_sec;
 						}
 						for (size_t i = 0; i < MAX_AV_PLANES; i++) {
 							context->audio.data[i] = peek_audio.data[i];
 						}
 
 
-						context->audio.speakers = info.speakers;
-						context->audio.format = AUDIO_FORMAT_FLOAT_PLANAR;
+						context->audio.speakers = context->current_replay.oai.speakers;
+						context->audio.format = context->current_replay.oai.format;
 
 						obs_source_output_audio(context->source, &context->audio);
 					}

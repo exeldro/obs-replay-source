@@ -209,7 +209,6 @@ static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 	context->texrender = gs_texrender_create(TEXFORMAT, GS_ZS_NONE);
 	context->video_data = NULL;
 	obs_get_video_info(&context->ovi);
-	obs_get_audio_info(&context->oai);
 	context->last_check = obs_get_video_frame_time();
 
 
