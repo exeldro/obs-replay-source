@@ -7,7 +7,6 @@
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include "replay.h"
-#include "obs-internal.h"
 
 static const char *replay_filter_get_name(void *unused)
 {

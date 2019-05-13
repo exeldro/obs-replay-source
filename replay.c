@@ -1,6 +1,4 @@
 #include "replay.h"
-#include "obs-internal.h"
-#include "../../UI/obs-frontend-api/obs-frontend-api.h"
 #include <math.h>
 
 void free_audio_data(struct replay_filter *filter)
@@ -32,6 +30,8 @@ static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
 {
 	return (ts1 < ts2) ?  (ts2 - ts1) : (ts1 - ts2);
 }
+
+EXPORT uint64_t os_gettime_ns(void);
 
 struct obs_audio_data *replay_filter_audio(void *data,
 		struct obs_audio_data *audio)
@@ -149,7 +149,7 @@ void replay_filter_check(struct replay_filter* filter)
 		{
 			obs_data_t* settings= obs_source_get_settings(s);
 			if(obs_data_get_bool(settings, SETTING_SOUND_TRIGGER)){
-				filter->threshold_data = (struct replay_source*)s->context.data;
+				filter->threshold_data = obs_obj_get_data(s);
 				filter->trigger_threshold = replay_trigger_threshold;
 			}
 			obs_data_release(settings);

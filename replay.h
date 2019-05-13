@@ -90,3 +90,6 @@ void replay_filter_check(struct replay_filter* filter);
 #ifndef MSEC_TO_NSEC
 #define MSEC_TO_NSEC 1000000ULL
 #endif
+#ifndef MAX_TS_VAR
+#define MAX_TS_VAR          2000000000ULL
+#endif

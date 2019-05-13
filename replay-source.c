@@ -703,10 +703,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		if(s){
 			if(strcmp(obs_source_get_id(s),"dshow_input_replay") == 0)
 			{
-				if(s->context.data){
+				if(obs_obj_get_data(s)){
 					obs_source_update(s, settings);
-					((struct replay_filter*)s->context.data)->threshold_data = data;
-					((struct replay_filter*)s->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					((struct replay_filter*)obs_obj_get_data(s))->threshold_data = data;
+					((struct replay_filter*)obs_obj_get_data(s))->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
 					context->filter_loaded = true;
 				}
 			}else{
@@ -725,12 +725,12 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					if(context->source_filter){
 						obs_source_filter_add(s,context->source_filter);
 					}
-				}else if(context->source_filter->context.data){
+				}else if(obs_obj_get_data(context->source_filter)){
 					obs_source_update(context->source_filter, settings);
 				}
-				if(context->source_filter->context.data){
-					((struct replay_filter*)context->source_filter->context.data)->threshold_data = data;
-					((struct replay_filter*)context->source_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+				if(obs_obj_get_data(context->source_filter)){
+					((struct replay_filter*)obs_obj_get_data(context->source_filter))->threshold_data = data;
+					((struct replay_filter*)obs_obj_get_data(context->source_filter))->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
 					context->filter_loaded = true;
 				}
 			}
@@ -743,10 +743,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		if(s){
 			if(strcmp(obs_source_get_id(s),"dshow_input_replay") == 0)
 			{
-				if(s->context.data){
+				if(obs_obj_get_data(s)){
 					obs_source_update(s, settings);
-					((struct replay_filter*)s->context.data)->threshold_data = data;
-					((struct replay_filter*)s->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+					((struct replay_filter*)obs_obj_get_data(s))->threshold_data = data;
+					((struct replay_filter*)obs_obj_get_data(s))->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
 					context->filter_loaded = true;
 				}
 			}else{
@@ -761,12 +761,12 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					if(context->source_audio_filter){
 						obs_source_filter_add(s,context->source_audio_filter);
 					}
-				}else if(context->source_audio_filter->context.data){
+				}else if(obs_obj_get_data(context->source_audio_filter)){
 					obs_source_update(context->source_audio_filter, settings);
 				}
-				if(context->source_audio_filter->context.data){
-					((struct replay_filter*)context->source_audio_filter->context.data)->threshold_data = data;
-					((struct replay_filter*)context->source_audio_filter->context.data)->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
+				if(obs_obj_get_data(context->source_audio_filter)){
+					((struct replay_filter*)obs_obj_get_data(context->source_audio_filter))->threshold_data = data;
+					((struct replay_filter*)obs_obj_get_data(context->source_audio_filter))->trigger_threshold = context->sound_trigger?replay_trigger_threshold:NULL;
 					context->filter_loaded = true;
 				}
 			}
@@ -1227,12 +1227,12 @@ static void replay_retrieve(struct replay_source *c)
 		obs_source_enum_filters(as, EnumAudioVideoFilter, c);
 	}
 
-	struct replay_filter* vf = c->source_filter?c->source_filter->context.data:NULL;
+	struct replay_filter* vf = c->source_filter?obs_obj_get_data(c->source_filter):NULL;
 	if(dswow_video)
-		vf = s->context.data;
-	struct replay_filter* af = c->source_audio_filter?c->source_audio_filter->context.data:vf;
+		vf = obs_obj_get_data(s);
+	struct replay_filter* af = c->source_audio_filter?obs_obj_get_data(c->source_audio_filter):vf;
 	if(dswow_audio)
-		af = s->context.data;
+		af = obs_obj_get_data(s);
 	if(vf && vf->video_frames.size == 0)
 		vf = NULL;
 	if(af && af->audio_frames.size == 0)

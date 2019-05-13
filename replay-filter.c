@@ -6,8 +6,6 @@
 #include <media-io/audio-resampler.h>
 #include <util/circlebuf.h>
 #include "replay.h"
-#include "obs-internal.h"
-#include <string.h>
 
 #define TEXFORMAT GS_BGRA
 
@@ -187,7 +185,7 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 	{
 		if(obs_data_get_bool(settings, SETTING_SOUND_TRIGGER) && !filter->trigger_threshold)
 		{
-			filter->threshold_data = (struct replay_source*)s->context.data;
+			filter->threshold_data = obs_obj_get_data(s);
 			filter->trigger_threshold = replay_trigger_threshold;
 		}
 		obs_source_release(s);
