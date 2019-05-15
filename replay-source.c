@@ -1218,13 +1218,12 @@ static void replay_retrieve(struct replay_source *c)
 	obs_source_t *as = obs_get_source_by_name(c->source_audio_name);
 	c->source_audio_filter = NULL;
 	if(as){
-		if(strcmp(obs_source_get_id(s),"dshow_input_replay")== 0)
+		if(strcmp(obs_source_get_id(as),"dshow_input_replay")== 0)
 		{
 			dswow_audio = true;
 		}else{
-			obs_source_enum_filters(s, EnumFilter, c);
+			obs_source_enum_filters(as, EnumAudioVideoFilter, c);
 		}
-		obs_source_enum_filters(as, EnumAudioVideoFilter, c);
 	}
 
 	struct replay_filter* vf = c->source_filter?obs_obj_get_data(c->source_filter):NULL;
@@ -1232,7 +1231,7 @@ static void replay_retrieve(struct replay_source *c)
 		vf = obs_obj_get_data(s);
 	struct replay_filter* af = c->source_audio_filter?obs_obj_get_data(c->source_audio_filter):vf;
 	if(dswow_audio)
-		af = obs_obj_get_data(s);
+		af = obs_obj_get_data(as);
 	if(vf && vf->video_frames.size == 0)
 		vf = NULL;
 	if(af && af->audio_frames.size == 0)
