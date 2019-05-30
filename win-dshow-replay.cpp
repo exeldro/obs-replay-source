@@ -181,7 +181,7 @@ struct DShowReplayInput {
 	VideoConfig  videoConfig;
 	AudioConfig  audioConfig;
 
-	obs_source_frame frame;
+	obs_source_frame2 frame;
 	obs_source_audio audio;
 
 	WinHandle semaphore;
@@ -260,7 +260,7 @@ struct DShowReplayInput {
 		WaitForSingleObject(thread, INFINITE);
 	}
 
-	void OnVideoOutput(obs_source_frame* frame);
+	void OnVideoOutput(obs_source_frame2* frame);
 	void OnEncodedVideoData(enum AVCodecID id,
 			unsigned char *data, size_t size, long long ts);
 	void OnAudioOutput(obs_source_audio* audio);
@@ -339,7 +339,7 @@ void DShowReplayInput::DShowLoop()
 				obs_data_t *settings;
 				settings = obs_source_get_settings(source);
 				if (!Activate(settings)) {
-					obs_source_output_video(source,
+					obs_source_output_video2(source,
 							nullptr);
 				}
 				if (block)
@@ -457,12 +457,33 @@ static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
 	return (ts1 < ts2) ?  (ts2 - ts1) : (ts1 - ts2);
 }
 
-void DShowReplayInput::OnVideoOutput(struct obs_source_frame *frame)
+void DShowReplayInput::OnVideoOutput(struct obs_source_frame2 *frame)
 {
 	const uint64_t os_time = obs_get_video_frame_time();
+	
+	struct obs_source_frame temp_frame;
+	enum video_range_type range = resolve_video_range(frame->format, frame->range);
+
+	for (size_t i = 0; i < MAX_AV_PLANES; i++) {
+		temp_frame.data[i] = frame->data[i];
+		temp_frame.linesize[i] = frame->linesize[i];
+	}
+	temp_frame.width = frame->width;
+	temp_frame.height = frame->height;
+	temp_frame.timestamp = frame->timestamp;
+	temp_frame.format = frame->format;
+	temp_frame.full_range = range == VIDEO_RANGE_FULL;
+	temp_frame.flip = frame->flip;
+	memcpy(&temp_frame.color_matrix, &frame->color_matrix,
+			sizeof(frame->color_matrix));
+	memcpy(&temp_frame.color_range_min, &frame->color_range_min,
+			sizeof(frame->color_range_min));
+	memcpy(&temp_frame.color_range_max, &frame->color_range_max,
+			sizeof(frame->color_range_max));
+
 	struct obs_source_frame *new_frame = obs_source_frame_create(frame->format, frame->width, frame->height);
 	new_frame->refs = 1;
-	obs_source_frame_copy(new_frame, frame);
+	obs_source_frame_copy(new_frame, &temp_frame);
 
 	const uint64_t timestamp = frame->timestamp;
 	uint64_t adjusted_time = timestamp + replay_filter.timing_adjust;
@@ -486,6 +507,9 @@ void DShowReplayInput::OnVideoOutput(struct obs_source_frame *frame)
 		if (os_atomic_dec_long(&output->refs) <= 0) {
 			obs_source_frame_destroy(output);
 			output = NULL;
+		}else
+		{
+			int t= 0;
 		}
 		if(replay_filter.video_frames.size){
 			circlebuf_peek_front(&replay_filter.video_frames, &output, sizeof(struct obs_source_frame*));
@@ -599,7 +623,7 @@ void DShowReplayInput::OnEncodedVideoData(enum AVCodecID id,
 		blog(LOG_DEBUG, "video ts: %llu", frame.timestamp);
 #endif
 		OnVideoOutput(&frame);
-		obs_source_output_video(source, &frame);
+		obs_source_output_video2(source, &frame);
 	}
 }
 
@@ -668,7 +692,7 @@ void DShowReplayInput::OnVideoData(const VideoConfig &config,
 		return;
 	}
 	OnVideoOutput(&frame);
-	obs_source_output_video(source, &frame);
+	obs_source_output_video2(source, &frame);
 
 	UNUSED_PARAMETER(endTime); /* it's the enndd tiimmes! */
 	UNUSED_PARAMETER(size);
@@ -1176,13 +1200,13 @@ inline bool DShowReplayInput::Activate(obs_data_t *settings)
 	enum video_colorspace cs = GetColorSpace(settings);
 
 	video_range_type range = GetColorRange(settings);
-	frame.full_range = range == VIDEO_RANGE_FULL;
+	frame.range = GetColorRange(settings);
 
 	if (device.Start() != Result::Success)
 		return false;
 
 	bool success = video_format_get_parameters(
-			cs, range,
+			cs, frame.range,
 			frame.color_matrix,
 			frame.color_range_min,
 			frame.color_range_max);
@@ -1197,7 +1221,7 @@ inline bool DShowReplayInput::Activate(obs_data_t *settings)
 inline void DShowReplayInput::Deactivate()
 {
 	device.ResetGraph();
-	obs_source_output_video(source, nullptr);
+	obs_source_output_video2(source, nullptr);
 }
 
 /* ------------------------------------------------------------------------- */
