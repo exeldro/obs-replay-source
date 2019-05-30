@@ -557,7 +557,7 @@ static void replay_free_replay(struct replay* replay, struct replay_source *cont
 		struct obs_source_frame* frame = replay->video_frames[i];
 		if (frame && os_atomic_dec_long(&frame->refs) <= 0) {
 			obs_source_frame_destroy(frame);
-			frame = NULL;
+			replay->video_frames[i] = NULL;
 		}
 	}
 	replay->video_frame_count = 0;
@@ -1296,7 +1296,7 @@ static void replay_retrieve(struct replay_source *c)
 				if (!audio.data[j])
 					break;
 
-				new_replay.audio_frames[i].data[j] = bmemdup(audio.data[j], new_replay.audio_frames[i].frames * sizeof(float));
+				new_replay.audio_frames[i].data[j] = audio.data[j];
 			}
 		}
 		pthread_mutex_unlock(&af->mutex);
@@ -2096,7 +2096,6 @@ static void *update_scene_thread(void *data)
 {
 	obs_source_t *scene = data;
 	obs_frontend_set_current_scene(scene);
-	obs_source_release(scene);
 	return NULL;
 }
 
@@ -2176,6 +2175,7 @@ void replay_source_end_action(struct replay_source* context)
 				obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
 				if(s)
 				{
+					obs_source_release(s);
 					pthread_t thread;
 					pthread_create(&thread, NULL, update_scene_thread, s);
 				}
@@ -2186,6 +2186,7 @@ void replay_source_end_action(struct replay_source* context)
 			obs_source_t *s = obs_get_source_by_name(context->next_scene_name);
 			if(s)
 			{
+				obs_source_release(s);
 				pthread_t thread;
 				pthread_create(&thread, NULL, update_scene_thread, s);
 			}
