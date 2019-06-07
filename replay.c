@@ -105,7 +105,9 @@ extern struct obs_source_info replay_filter_audio_info;
 extern struct obs_source_info replay_filter_async_info;
 extern struct obs_source_info replay_source_info;
 
+#if defined(_WIN32)
 extern void RegisterDShowReplaySource();
+#endif
 
 bool obs_module_load(void)
 {
@@ -113,7 +115,9 @@ bool obs_module_load(void)
 	obs_register_source(&replay_filter_info);
 	obs_register_source(&replay_filter_audio_info);
 	obs_register_source(&replay_filter_async_info);
+#if defined(_WIN32)
 	RegisterDShowReplaySource();
+#endif
 	return true;
 }
 

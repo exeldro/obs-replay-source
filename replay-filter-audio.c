@@ -68,7 +68,7 @@ static void replay_filter_remove(void *data, obs_source_t *parent)
 	free_audio_data(filter);
 }
 
-obs_properties_t *replay_filter_properties(void *unused)
+static obs_properties_t *replay_filter_properties(void *unused)
 {
 	UNUSED_PARAMETER(unused);
 
