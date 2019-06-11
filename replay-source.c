@@ -595,7 +595,7 @@ static void replay_purge_replays(struct replay_source *context)
 		pthread_mutex_unlock(&context->replay_mutex);
 	}
 }
-void replay_retrieve(struct replay_source *c);
+static void replay_retrieve(struct replay_source *c);
 
 void replay_trigger_threshold(void *data)
 {
