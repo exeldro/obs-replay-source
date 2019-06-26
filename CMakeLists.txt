@@ -46,7 +46,7 @@ if(WIN32)
 
 	set(libdshowcapture_HEADERS
 		../win-dshow/libdshowcapture/dshowcapture.hpp
-		../win-dshow/libdshowcapture/source/IVideoCaptureFilter.h
+		../win-dshow/libdshowcapture/source/external/IVideoCaptureFilter.h
 		../win-dshow/libdshowcapture/source/capture-filter.hpp
 		../win-dshow/libdshowcapture/source/output-filter.hpp
 		../win-dshow/libdshowcapture/source/device.hpp

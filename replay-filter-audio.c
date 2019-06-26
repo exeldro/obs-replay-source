@@ -18,18 +18,18 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 {
 	struct replay_filter *filter = data;
 
-
-	const uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * MSEC_TO_NSEC;
+	const uint64_t new_duration =
+		(uint64_t)obs_data_get_int(settings, SETTING_DURATION) *
+		MSEC_TO_NSEC;
 
 	if (new_duration < filter->duration)
 		free_video_data(filter);
 
 	filter->duration = new_duration;
-	const double db = obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
+	const double db =
+		obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
 	filter->threshold = db_to_mul((float)db);
-	
 }
-
 
 static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 {
@@ -56,7 +56,7 @@ static void replay_filter_destroy(void *data)
 	circlebuf_free(&filter->video_frames);
 	circlebuf_free(&filter->audio_frames);
 	pthread_mutex_destroy(&filter->mutex);
-	
+
 	bfree(data);
 }
 
@@ -73,22 +73,27 @@ static obs_properties_t *replay_filter_properties(void *unused)
 	UNUSED_PARAMETER(unused);
 
 	obs_properties_t *props = obs_properties_create();
-	
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION, SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
-	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,"Threshold db",SETTING_AUDIO_THRESHOLD_MIN, SETTING_AUDIO_THRESHOLD_MAX,0.1);
+
+	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION,
+			       SETTING_DURATION_MIN, SETTING_DURATION_MAX,
+			       1000);
+	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,
+					"Threshold db",
+					SETTING_AUDIO_THRESHOLD_MIN,
+					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
 
 	return props;
 }
 
 struct obs_source_info replay_filter_audio_info = {
-	.id             = REPLAY_FILTER_AUDIO_ID,
-	.type           = OBS_SOURCE_TYPE_FILTER,
-	.output_flags   = OBS_SOURCE_AUDIO,
-	.create         = replay_filter_create,
-	.destroy        = replay_filter_destroy,
-	.update         = replay_filter_update,
-	.get_name       = replay_filter_get_name,
+	.id = REPLAY_FILTER_AUDIO_ID,
+	.type = OBS_SOURCE_TYPE_FILTER,
+	.output_flags = OBS_SOURCE_AUDIO,
+	.create = replay_filter_create,
+	.destroy = replay_filter_destroy,
+	.update = replay_filter_update,
+	.get_name = replay_filter_get_name,
 	.get_properties = replay_filter_properties,
-	.filter_remove  = replay_filter_remove,
-	.filter_audio   = replay_filter_audio,
+	.filter_remove = replay_filter_remove,
+	.filter_audio = replay_filter_audio,
 };
