@@ -66,6 +66,7 @@ struct replay_source {
 	int end_action;
 	char *next_scene_name;
 	bool next_scene_disabled;
+	char *load_switch_scene_name;
 	obs_hotkey_id replay_hotkey;
 	obs_hotkey_id next_hotkey;
 	obs_hotkey_id previous_hotkey;
@@ -704,7 +705,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		context->source_audio_name = bstrdup(source_audio_name);
 	}
 	const char *next_scene_name =
-		obs_data_get_string(settings, "next_scene");
+		obs_data_get_string(settings, SETTING_NEXT_SCENE);
 	if (context->next_scene_name) {
 		if (strcmp(context->next_scene_name, next_scene_name) != 0) {
 			bfree(context->next_scene_name);
@@ -712,6 +713,20 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		}
 	} else {
 		context->next_scene_name = bstrdup(next_scene_name);
+	}
+
+	const char *load_switch_scene_name =
+		obs_data_get_string(settings, SETTING_LOAD_SWITCH_SCENE);
+	if (context->load_switch_scene_name) {
+		if (strcmp(context->load_switch_scene_name,
+			   load_switch_scene_name) != 0) {
+			bfree(context->load_switch_scene_name);
+			context->load_switch_scene_name =
+				bstrdup(load_switch_scene_name);
+		}
+	} else {
+		context->load_switch_scene_name =
+			bstrdup(load_switch_scene_name);
 	}
 
 	context->visibility_action =
@@ -1349,7 +1364,6 @@ void replay_save(struct replay_source *context)
 
 static void replay_retrieve(struct replay_source *context)
 {
-
 	obs_source_t *s = obs_get_source_by_name(context->source_name);
 	context->source_filter = NULL;
 	bool dswow_video = false;
@@ -1509,6 +1523,13 @@ static void replay_retrieve(struct replay_source *context)
 		replay_update_position(context, true);
 	}
 	replay_purge_replays(context);
+	if (context->load_switch_scene_name) {
+		s = obs_get_source_by_name(context->load_switch_scene_name);
+		if (s) {
+			obs_frontend_set_current_scene(s);
+			obs_source_release(s);
+		}
+	}
 }
 
 static void replay_hotkey(void *data, obs_hotkey_id id, obs_hotkey_t *hotkey,
@@ -2171,6 +2192,9 @@ static void replay_source_destroy(void *data)
 
 	if (context->next_scene_name)
 		bfree(context->next_scene_name);
+
+	if (context->load_switch_scene_name)
+		bfree(context->load_switch_scene_name);
 
 	if (context->directory)
 		bfree(context->directory);
@@ -3172,6 +3196,13 @@ static obs_properties_t *replay_source_properties(void *data)
 					"Threshold db",
 					SETTING_AUDIO_THRESHOLD_MIN,
 					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
+
+	prop = obs_properties_add_list(props, SETTING_LOAD_SWITCH_SCENE,
+				       "Load replay switch scene",
+				       OBS_COMBO_TYPE_EDITABLE,
+				       OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(prop, "", "");
+	obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_button(props, "replay_button", "Load replay",
 				  replay_button);
