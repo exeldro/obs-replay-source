@@ -77,6 +77,7 @@ using namespace DShow;
 #define TEXT_COLOR_SPACE obs_module_text("ColorSpace")
 #define TEXT_COLOR_DEFAULT obs_module_text("ColorSpace.Default")
 #define TEXT_COLOR_RANGE obs_module_text("ColorRange")
+#define TEXT_RANGE_DEFAULT obs_module_text("ColorRange.Default")
 #define TEXT_RANGE_PARTIAL obs_module_text("ColorRange.Partial")
 #define TEXT_RANGE_FULL obs_module_text("ColorRange.Full")
 #define TEXT_DWNS obs_module_text("DeactivateWhenNotShowing")
@@ -418,8 +419,6 @@ static inline video_format ConvertVideoFormat(VideoFormat format)
 		return VIDEO_FORMAT_UYVY;
 	case VideoFormat::HDYC:
 		return VIDEO_FORMAT_UYVY;
-	case VideoFormat::MJPEG:
-		return VIDEO_FORMAT_YUY2;
 	default:
 		return VIDEO_FORMAT_NONE;
 	}
@@ -623,12 +622,19 @@ void DShowReplayInput::OnAudioOutput(obs_source_audio *audio)
 //#define LOG_ENCODED_VIDEO_TS 1
 //#define LOG_ENCODED_AUDIO_TS 1
 
+#define MAX_SW_RES_INT (1920 * 1080)
+
 void DShowReplayInput::OnEncodedVideoData(enum AVCodecID id,
 					  unsigned char *data, size_t size,
 					  long long ts)
 {
 	if (!ffmpeg_decode_valid(video_decoder)) {
-		if (ffmpeg_decode_init(video_decoder, id) < 0) {
+		/* Only use MJPEG hardware decoding on resolutions higher
+		 * than 1920x1080.  The reason why is because we want to strike
+		 * a reasonable balance between hardware and CPU usage. */
+		bool useHW = videoConfig.format != VideoFormat::MJPEG ||
+			     (videoConfig.cx * videoConfig.cy) > MAX_SW_RES_INT;
+		if (ffmpeg_decode_init(video_decoder, id, useHW) < 0) {
 			blog(LOG_WARNING, "Could not initialize video decoder");
 			return;
 		}
@@ -660,6 +666,11 @@ void DShowReplayInput::OnVideoData(const VideoConfig &config,
 {
 	if (videoConfig.format == VideoFormat::H264) {
 		OnEncodedVideoData(AV_CODEC_ID_H264, data, size, startTime);
+		return;
+	}
+
+	if (videoConfig.format == VideoFormat::MJPEG) {
+		OnEncodedVideoData(AV_CODEC_ID_MJPEG, data, size, startTime);
 		return;
 	}
 
@@ -730,7 +741,7 @@ void DShowReplayInput::OnEncodedAudioData(enum AVCodecID id,
 					  long long ts)
 {
 	if (!ffmpeg_decode_valid(audio_decoder)) {
-		if (ffmpeg_decode_init(audio_decoder, id) < 0) {
+		if (ffmpeg_decode_init(audio_decoder, id, false) < 0) {
 			blog(LOG_WARNING, "Could not initialize audio decoder");
 			return;
 		}
@@ -959,11 +970,16 @@ static bool DetermineResolution(int &cx, int &cy, obs_data_t *settings,
 
 static long long GetOBSFPS();
 
-static inline bool IsEncoded(const VideoConfig &config)
+static inline bool IsDelayedDevice(const VideoConfig &config)
 {
-	return config.format >= VideoFormat::MJPEG ||
+	return config.format > VideoFormat::MJPEG ||
 	       wstrstri(config.name.c_str(), L"elgato") != NULL ||
 	       wstrstri(config.name.c_str(), L"stream engine") != NULL;
+}
+
+static inline bool IsDecoupled(const VideoConfig &config)
+{
+	return wstrstri(config.name.c_str(), L"GV-USB2") != NULL;
 }
 
 inline void DShowReplayInput::SetupBuffering(obs_data_t *settings)
@@ -974,11 +990,12 @@ inline void DShowReplayInput::SetupBuffering(obs_data_t *settings)
 	bufType = (BufferingType)obs_data_get_int(settings, BUFFERING_VAL);
 
 	if (bufType == BufferingType::Auto)
-		useBuffering = IsEncoded(videoConfig);
+		useBuffering = IsDelayedDevice(videoConfig);
 	else
 		useBuffering = bufType == BufferingType::On;
 
 	obs_source_set_async_unbuffered(source, !useBuffering);
+	obs_source_set_async_decoupled(source, IsDecoupled(videoConfig));
 }
 
 static DStr GetVideoFormatName(VideoFormat format);
@@ -1064,26 +1081,12 @@ bool DShowReplayInput::UpdateVideoConfig(obs_data_t *settings)
 					 placeholders::_3, placeholders::_4,
 					 placeholders::_5);
 
-	if (videoConfig.internalFormat != VideoFormat::MJPEG)
-		videoConfig.format = videoConfig.internalFormat;
+	videoConfig.format = videoConfig.internalFormat;
 
 	if (!device.SetVideoConfig(&videoConfig)) {
 		blog(LOG_WARNING, "%s: device.SetVideoConfig failed",
 		     obs_source_get_name(source));
 		return false;
-	}
-
-	if (videoConfig.internalFormat == VideoFormat::MJPEG) {
-		videoConfig.format = VideoFormat::XRGB;
-		videoConfig.useDefaultConfig = false;
-
-		if (!device.SetVideoConfig(&videoConfig)) {
-			blog(LOG_WARNING,
-			     "%s: device.SetVideoConfig (XRGB) "
-			     "failed",
-			     obs_source_get_name(source));
-			return false;
-		}
 	}
 
 	DStr formatName = GetVideoFormatName(videoConfig.internalFormat);
@@ -1215,8 +1218,11 @@ DShowReplayInput::GetColorRange(obs_data_t *settings) const
 {
 	const char *range = obs_data_get_string(settings, COLOR_RANGE);
 
-	return astrcmpi(range, "full") == 0 ? VIDEO_RANGE_FULL
-					    : VIDEO_RANGE_PARTIAL;
+	if (astrcmpi(range, "full") == 0)
+		return VIDEO_RANGE_FULL;
+	if (astrcmpi(range, "partial") == 0)
+		return VIDEO_RANGE_PARTIAL;
+	return VIDEO_RANGE_DEFAULT;
 }
 
 inline bool DShowReplayInput::Activate(obs_data_t *settings)
@@ -1321,7 +1327,7 @@ static void GetDShowReplayDefaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, VIDEO_FORMAT, (int)VideoFormat::Any);
 	obs_data_set_default_bool(settings, "active", true);
 	obs_data_set_default_string(settings, COLOR_SPACE, "default");
-	obs_data_set_default_string(settings, COLOR_RANGE, "partial");
+	obs_data_set_default_string(settings, COLOR_RANGE, "default");
 	obs_data_set_default_int(settings, AUDIO_OUTPUT_MODE,
 				 (int)AudioMode::Capture);
 }
@@ -2055,6 +2061,7 @@ static obs_properties_t *GetDShowReplayProperties(void *obj)
 	p = obs_properties_add_list(ppts, COLOR_RANGE, TEXT_COLOR_RANGE,
 				    OBS_COMBO_TYPE_LIST,
 				    OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(p, TEXT_RANGE_DEFAULT, "default");
 	obs_property_list_add_string(p, TEXT_RANGE_PARTIAL, "partial");
 	obs_property_list_add_string(p, TEXT_RANGE_FULL, "full");
 
