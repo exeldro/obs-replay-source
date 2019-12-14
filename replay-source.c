@@ -1193,7 +1193,7 @@ bool audio_input_callback(void *param, uint64_t start_ts_in, uint64_t end_ts_in,
 						 .timestamp -
 					 context->saving_replay
 						 .first_frame_timestamp));
-			if (start_point2 >= AUDIO_OUTPUT_FRAMES) {
+			if (start_point2 >= context->saving_replay.audio_frames[i].frames) {
 				i++;
 				continue;
 			}
@@ -1213,6 +1213,9 @@ bool audio_input_callback(void *param, uint64_t start_ts_in, uint64_t end_ts_in,
 					context->saving_replay.audio_frames[i]
 						.data[ch];
 				register float *end;
+
+				if (!aud)
+					continue;
 
 				aud += start_point2;
 				mix += start_point;
