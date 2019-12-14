@@ -3006,8 +3006,6 @@ static void replay_source_tick(void *data, float seconds)
 
 		const int64_t video_duration =
 			os_timestamp - context->start_timestamp;
-		struct obs_audio_info info;
-		obs_get_audio_info(&info);
 
 		int64_t audio_duration = ((int64_t)peek_audio.timestamp -
 					  (int64_t)context->current_replay
@@ -3049,7 +3047,8 @@ static void replay_source_tick(void *data, float seconds)
 						 .first_frame_timestamp) *
 						100.0 / context->speed_percent;
 				context->audio.samples_per_sec =
-					info.samples_per_sec *
+					context->current_replay.oai
+						.samples_per_sec *
 					context->speed_percent / 100.0;
 			} else {
 				context->audio.timestamp =
@@ -3058,14 +3057,16 @@ static void replay_source_tick(void *data, float seconds)
 					context->current_replay
 						.first_frame_timestamp;
 				context->audio.samples_per_sec =
-					info.samples_per_sec;
+					context->current_replay.oai
+						.samples_per_sec;
 			}
 			for (size_t i = 0; i < MAX_AV_PLANES; i++) {
 				context->audio.data[i] = peek_audio.data[i];
 			}
-
-			context->audio.speakers = info.speakers;
-			context->audio.format = AUDIO_FORMAT_FLOAT_PLANAR;
+			context->audio.speakers =
+				context->current_replay.oai.speakers;
+			context->audio.format =
+				context->current_replay.oai.format;
 
 			obs_source_output_audio(context->source,
 						&context->audio);
