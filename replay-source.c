@@ -96,6 +96,8 @@ struct replay_source {
 	obs_hotkey_id disable_hotkey;
 	obs_hotkey_id enable_next_scene_hotkey;
 	obs_hotkey_id disable_next_scene_hotkey;
+	obs_hotkey_id next_scene_current_hotkey;
+	obs_hotkey_id next_scene_hotkey;
 	uint64_t start_timestamp;
 	uint64_t previous_frame_timestamp;
 	uint64_t pause_timestamp;
@@ -1625,6 +1627,63 @@ static void replay_enable_next_scene_hotkey(void *data, obs_hotkey_id id,
 	c->next_scene_disabled = false;
 }
 
+static void replay_next_scene_current_hotkey(void *data, obs_hotkey_id id,
+					     obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+	if (!pressed)
+		return;
+
+	obs_source_t *current_scene = obs_frontend_get_current_scene();
+	if (current_scene == NULL)
+		return;
+
+	const char *next_scene_name = obs_source_get_name(current_scene);
+	obs_source_release(current_scene);
+	if (c->next_scene_name) {
+		if (strcmp(c->next_scene_name, next_scene_name) != 0) {
+			bfree(c->next_scene_name);
+			c->next_scene_name = bstrdup(next_scene_name);
+		}
+	} else {
+		c->next_scene_name = bstrdup(next_scene_name);
+	}
+}
+
+static void replay_next_scene_hotkey(void *data, obs_hotkey_id id,
+				     obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+	if (!pressed || !c->next_scene_name)
+		return;
+
+	obs_source_t *current = obs_frontend_get_current_scene();
+	if (current) {
+		const char *current_name = obs_source_get_name(current);
+		if (strcmp(current_name, c->next_scene_name) != 0) {
+			obs_source_t *s =
+				obs_get_source_by_name(c->next_scene_name);
+			if (s) {
+				obs_frontend_set_current_scene(s);
+				obs_source_release(s);
+			}
+		}
+		obs_source_release(current);
+	} else {
+		obs_source_t *s = obs_get_source_by_name(c->next_scene_name);
+		if (s) {
+			obs_frontend_set_current_scene(s);
+			obs_source_release(s);
+		}
+	}
+}
+
 static void replay_next_hotkey(void *data, obs_hotkey_id id,
 			       obs_hotkey_t *hotkey, bool pressed)
 {
@@ -2173,6 +2232,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 		source, "ReplaySource.EnableNextScene",
 		obs_module_text("Enable next scene"),
 		replay_enable_next_scene_hotkey, context);
+
+	context->next_scene_current_hotkey = obs_hotkey_register_source(
+		source, "ReplaySource.NextSceneCurrent",
+		obs_module_text("Set next scene to current"),
+		replay_next_scene_current_hotkey, context);
+
+	context->next_scene_hotkey = obs_hotkey_register_source(
+		source, "ReplaySource.NextScene",
+		obs_module_text("Switch to next scene"),
+		replay_next_scene_hotkey, context);
 
 	return context;
 }
