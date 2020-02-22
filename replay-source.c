@@ -1193,7 +1193,8 @@ bool audio_input_callback(void *param, uint64_t start_ts_in, uint64_t end_ts_in,
 						 .timestamp -
 					 context->saving_replay
 						 .first_frame_timestamp));
-			if (start_point2 >= context->saving_replay.audio_frames[i].frames) {
+			if (start_point2 >=
+			    context->saving_replay.audio_frames[i].frames) {
 				i++;
 				continue;
 			}
@@ -3124,8 +3125,11 @@ static bool replay_button(obs_properties_t *props, obs_property_t *property,
 static bool EnumTextSources(void *data, obs_source_t *source)
 {
 	obs_property_t *prop = data;
-	if (strcmp(obs_source_get_id(source), "text_gdiplus") == 0 ||
-	    strcmp(obs_source_get_id(source), "text_ft2_source") == 0)
+	const char *source_id = obs_source_get_id(source);
+	if (strcmp(source_id, "text_gdiplus") == 0 ||
+	    strcmp(source_id, "text_gdiplus_v2") == 0 ||
+	    strcmp(source_id, "text_ft2_source") == 0 ||
+	    strcmp(source_id, "text_ft2_source_v2") == 0)
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
@@ -3292,11 +3296,123 @@ static obs_properties_t *replay_source_properties(void *data)
 	return props;
 }
 
+void replay_play_pause(void *data, bool pause)
+{
+	struct replay_source *c = data;
+	if (pause) {
+		if (c->play) {
+			c->play = false;
+			c->pause_timestamp = obs_get_video_frame_time();
+		} else {
+			c->play = true;
+			if (c->pause_timestamp) {
+				c->start_timestamp +=
+					obs_get_video_frame_time() -
+					c->pause_timestamp;
+				c->pause_timestamp = 0;
+			}
+		}
+	} else {
+		const int64_t time = obs_get_video_frame_time();
+		if (c->pause_timestamp) {
+			c->start_timestamp += time - c->pause_timestamp;
+			c->pause_timestamp = 0;
+		}
+		c->play = true;
+		if (c->end || (c->video_frame_position == 0 && c->backward)) {
+			c->end = false;
+			if (c->backward) {
+				if (c->current_replay.video_frame_count)
+					c->video_frame_position =
+						c->current_replay
+							.video_frame_count -
+						1;
+			} else {
+				c->video_frame_position = 0;
+			}
+			c->start_timestamp = obs_get_video_frame_time();
+		}
+	}
+}
+void replay_restart(void *data)
+{
+	struct replay_source *c = data;
+	c->restart = true;
+	c->play = true;
+}
+void replay_stop(void *data) {}
+void replay_next(void *data)
+{
+	struct replay_source *context = data;
+	const int replay_count =
+		context->replays.size / sizeof context->current_replay;
+	if (replay_count == 0)
+		return;
+
+	if (context->replay_position + 1 >= replay_count) {
+		context->replay_position = replay_count - 1;
+	} else {
+		context->replay_position++;
+	}
+	replay_update_position(context, true);
+	info("next switched to replay %i/%i", context->replay_position + 1,
+	     replay_count);
+}
+
+void replay_previous(void *data)
+{
+	struct replay_source *context = data;
+	if (context->replay_position <= 0) {
+		context->replay_position = 0;
+	} else {
+		context->replay_position--;
+	}
+	replay_update_position(context, true);
+	info("previous hotkey switched to replay %i/%i",
+	     context->replay_position + 1,
+	     context->replays.size / sizeof context->current_replay);
+}
+
+int64_t replay_get_duration(void *data)
+{
+	struct replay_source *c = data;
+	return c->current_replay.duration * c->speed_percent / 100.0;
+}
+
+int64_t replay_get_time(void *data)
+{
+	struct replay_source *c = data;
+	if (c->replays.size && c->start_timestamp) {
+		uint64_t time = 0;
+		if (c->pause_timestamp > c->start_timestamp) {
+			time = c->pause_timestamp - c->start_timestamp;
+		} else {
+			time = obs_get_video_frame_time() - c->start_timestamp;
+		}
+		if (c->speed_percent != 100.0f) {
+			time = time * c->speed_percent / 100.0;
+		}
+		return time;
+	}
+	return 0;
+}
+void replay_set_time(void *data, int64_t seconds) {}
+enum obs_media_state replay_get_state(void *data)
+{
+	struct replay_source *c = data;
+	if (c->play)
+		return OBS_MEDIA_STATE_PLAYING;
+	if (c->end)
+		return OBS_MEDIA_STATE_ENDED;
+	return OBS_MEDIA_STATE_PAUSED;
+}
+
 struct obs_source_info replay_source_info = {
 	.id = REPLAY_SOURCE_ID,
 	.type = OBS_SOURCE_TYPE_INPUT,
 	.output_flags = OBS_SOURCE_ASYNC_VIDEO | OBS_SOURCE_AUDIO |
-			OBS_SOURCE_DO_NOT_DUPLICATE,
+			OBS_SOURCE_DO_NOT_DUPLICATE |
+			OBS_SOURCE_CONTROLLABLE_MEDIA,
 	.get_name = replay_source_get_name,
 	.create = replay_source_create,
 	.destroy = replay_source_destroy,
@@ -3307,4 +3423,15 @@ struct obs_source_info replay_source_info = {
 	.activate = replay_source_active,
 	.deactivate = replay_source_deactive,
 	.video_tick = replay_source_tick,
-	.get_properties = replay_source_properties};
+	.get_properties = replay_source_properties,
+	.icon_type = OBS_ICON_TYPE_MEDIA,
+	.media_get_duration = replay_get_duration,
+	.media_get_state = replay_get_state,
+	.media_get_time = replay_get_time,
+	.media_next = replay_next,
+	.media_play_pause = replay_play_pause,
+	.media_previous = replay_previous,
+	.media_restart = replay_restart,
+	.media_stop = replay_stop,
+	.media_set_time = replay_set_time,
+};

@@ -205,8 +205,6 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 
 static void *replay_filter_create(obs_data_t *settings, obs_source_t *source)
 {
-	UNUSED_PARAMETER(source);
-
 	struct replay_filter *context = bzalloc(sizeof(struct replay_filter));
 	context->src = source;
 	pthread_mutex_init(&context->mutex, NULL);
