@@ -1361,7 +1361,10 @@ void replay_save(struct replay_source *context)
 	if (!obs_output_start(context->fileOutput)) {
 		const char *error =
 			obs_output_get_last_error(context->fileOutput);
-		warn("error output start: %s");
+		if (error)
+			warn("error output start: %s", error);
+		else
+			warn("error output start");
 		context->saving_status = SAVING_STATUS_NONE;
 		if (context->free_after_save) {
 			replay_free_replay(&context->saving_replay, context);
