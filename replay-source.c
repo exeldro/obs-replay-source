@@ -344,7 +344,7 @@ static void EnumFilter(obs_source_t *source, obs_source_t *filter, void *data)
 	struct replay_source *c = data;
 	const char *filterName = obs_source_get_name(filter);
 	const char *sourceName = obs_source_get_name(c->source);
-	const char *id = obs_source_get_id(filter);
+	const char *id = obs_source_get_unversioned_id(filter);
 	if ((strcmp(REPLAY_FILTER_ASYNC_ID, id) == 0 ||
 	     strcmp(REPLAY_FILTER_ID, id) == 0) &&
 	    strcmp(filterName, sourceName) == 0)
@@ -356,7 +356,7 @@ static void EnumAudioFilter(obs_source_t *source, obs_source_t *filter,
 	struct replay_source *c = data;
 	const char *filterName = obs_source_get_name(filter);
 	const char *sourceName = obs_source_get_name(c->source);
-	const char *id = obs_source_get_id(filter);
+	const char *id = obs_source_get_unversioned_id(filter);
 	if (strcmp(REPLAY_FILTER_AUDIO_ID, id) == 0 &&
 	    strcmp(filterName, sourceName) == 0)
 		c->source_audio_filter = filter;
@@ -367,7 +367,7 @@ static void EnumAudioVideoFilter(obs_source_t *source, obs_source_t *filter,
 	struct replay_source *c = data;
 	const char *filterName = obs_source_get_name(filter);
 	const char *sourceName = obs_source_get_name(c->source);
-	const char *id = obs_source_get_id(filter);
+	const char *id = obs_source_get_unversioned_id(filter);
 	if ((strcmp(REPLAY_FILTER_AUDIO_ID, id) == 0 ||
 	     strcmp(REPLAY_FILTER_ASYNC_ID, id) == 0 ||
 	     strcmp(REPLAY_FILTER_ID, id) == 0) &&
@@ -765,7 +765,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			s = obs_get_source_by_name(context->source_name);
 		}
 		if (s) {
-			if (strcmp(obs_source_get_id(s),
+			if (strcmp(obs_source_get_unversioned_id(s),
 				   "dshow_input_replay") == 0) {
 				if (obs_obj_get_data(s)) {
 					obs_source_update(s, settings);
@@ -844,7 +844,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			s = obs_get_source_by_name(context->source_audio_name);
 		}
 		if (s) {
-			if (strcmp(obs_source_get_id(s),
+			if (strcmp(obs_source_get_unversioned_id(s),
 				   "dshow_input_replay") == 0) {
 				if (obs_obj_get_data(s)) {
 					obs_source_update(s, settings);
@@ -1381,7 +1381,8 @@ static void replay_retrieve(struct replay_source *context)
 	bool dswow_video = false;
 	bool dswow_audio = false;
 	if (s) {
-		if (strcmp(obs_source_get_id(s), "dshow_input_replay") == 0) {
+		if (strcmp(obs_source_get_unversioned_id(s),
+			   "dshow_input_replay") == 0) {
 			dswow_video = true;
 		} else {
 			obs_source_enum_filters(s, EnumFilter, context);
@@ -1390,7 +1391,8 @@ static void replay_retrieve(struct replay_source *context)
 	obs_source_t *as = obs_get_source_by_name(context->source_audio_name);
 	context->source_audio_filter = NULL;
 	if (as) {
-		if (strcmp(obs_source_get_id(as), "dshow_input_replay") == 0) {
+		if (strcmp(obs_source_get_unversioned_id(as),
+			   "dshow_input_replay") == 0) {
 			dswow_audio = true;
 		} else {
 			obs_source_enum_filters(as, EnumAudioVideoFilter,
@@ -3128,11 +3130,9 @@ static bool replay_button(obs_properties_t *props, obs_property_t *property,
 static bool EnumTextSources(void *data, obs_source_t *source)
 {
 	obs_property_t *prop = data;
-	const char *source_id = obs_source_get_id(source);
+	const char *source_id = obs_source_get_unversioned_id(source);
 	if (strcmp(source_id, "text_gdiplus") == 0 ||
-	    strcmp(source_id, "text_gdiplus_v2") == 0 ||
-	    strcmp(source_id, "text_ft2_source") == 0 ||
-	    strcmp(source_id, "text_ft2_source_v2") == 0)
+	    strcmp(source_id, "text_ft2_source"))
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
