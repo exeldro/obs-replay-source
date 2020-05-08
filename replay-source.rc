@@ -1,0 +1,32 @@
+1 VERSIONINFO
+ FILEVERSION 1,6,0,0
+ PRODUCTVERSION 1,6,0,0
+ FILEFLAGSMASK 0x0L
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x0L
+ FILETYPE 0x2L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Exeldro"
+            VALUE "FileDescription", "Replay Source"
+            VALUE "FileVersion", "1.6.0"
+            VALUE "InternalName", "replay-source"
+            VALUE "LegalCopyright", "(C) Exeldro"
+            VALUE "OriginalFilename", "replay-source"
+            VALUE "ProductName", "Replay Source"
+            VALUE "ProductVersion", "1.6.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

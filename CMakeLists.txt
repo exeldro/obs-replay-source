@@ -22,7 +22,8 @@ if(WIN32)
 		../win-dshow/ffmpeg-decode.h)
 	list(APPEND replay-source_SOURCES
 		win-dshow-replay.cpp
-		../win-dshow/ffmpeg-decode.c)
+		../win-dshow/ffmpeg-decode.c
+		replay-source.rc)
 
 	list(APPEND replay-source_PLATFORM_DEPS
 		strmiids
