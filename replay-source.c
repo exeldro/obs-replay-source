@@ -336,7 +336,7 @@ static void replay_update_progress_crop(struct replay_source *context,
 static const char *replay_source_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return obs_module_text("ReplayInput");
+	return obs_module_text("ReplaySource");
 }
 
 static void EnumFilter(obs_source_t *source, obs_source_t *filter, void *data)
@@ -1839,6 +1839,7 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id,
 	replay_update_text(context);
 	replay_update_progress_crop(context, 0);
 	info("clear hotkey");
+	obs_source_media_ended(context->source);
 }
 void update_speed(struct replay_source *context, float new_speed)
 {
@@ -2123,8 +2124,8 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 	replay_source_update(context, settings);
 
 	context->replay_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.Replay", "Load replay", replay_hotkey,
-		context);
+		source, "ReplaySource.Replay", obs_module_text("LoadReplay"),
+		replay_hotkey, context);
 
 	context->next_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.Next", obs_module_text("Next"),
@@ -2151,8 +2152,8 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 		replay_clear_hotkey, context);
 
 	context->save_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.Save", "Save replay", replay_save_hotkey,
-		context);
+		source, "ReplaySource.Save", obs_module_text("SaveReplay"),
+		replay_save_hotkey, context);
 
 	context->restart_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.Restart", obs_module_text("Restart"),
@@ -2171,37 +2172,39 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 		replay_slower_hotkey, context);
 
 	context->normal_or_faster_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.NormalOrFaster", "Normal or faster",
+		source, "ReplaySource.NormalOrFaster",
+		obs_module_text("NormalOrFaster"),
 		replay_normal_or_faster_hotkey, context);
 
 	context->normal_or_slower_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.NormalOrSlower", "Normal or slower",
+		source, "ReplaySource.NormalOrSlower",
+		obs_module_text("NormalOrSlower"),
 		replay_normal_or_slower_hotkey, context);
 
 	context->normal_speed_hotkey =
 		obs_hotkey_register_source(source, "ReplaySource.NormalSpeed",
-					   obs_module_text("Normal speed"),
+					   obs_module_text("NormalSpeed"),
 					   replay_normal_speed_hotkey, context);
 
 	context->half_speed_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.HalfSpeed", obs_module_text("Half speed"),
+		source, "ReplaySource.HalfSpeed", obs_module_text("HalfSpeed"),
 		replay_half_speed_hotkey, context);
 
 	context->double_speed_hotkey =
 		obs_hotkey_register_source(source, "ReplaySource.DoubleSpeed",
-					   obs_module_text("Double speed"),
+					   obs_module_text("DoubleSpeed"),
 					   replay_double_speed_hotkey, context);
 
 	context->trim_front_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.TrimFront", obs_module_text("Trim front"),
+		source, "ReplaySource.TrimFront", obs_module_text("TrimFront"),
 		replay_trim_front_hotkey, context);
 
 	context->trim_end_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.TrimEnd", obs_module_text("Trim end"),
+		source, "ReplaySource.TrimEnd", obs_module_text("TrimEnd"),
 		replay_trim_end_hotkey, context);
 
 	context->trim_reset_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.TrimReset", obs_module_text("Trim reset"),
+		source, "ReplaySource.TrimReset", obs_module_text("TrimReset"),
 		replay_trim_reset_hotkey, context);
 
 	context->reverse_hotkey = obs_hotkey_register_source(
@@ -2217,11 +2220,13 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 		replay_backward_hotkey, context);
 
 	context->forward_or_faster_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.ForwardOrFaster", "Forward or faster",
+		source, "ReplaySource.ForwardOrFaster",
+		obs_module_text("ForwardOrFaster"),
 		replay_forward_or_faster_hotkey, context);
 
 	context->backward_or_faster_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.BackwardOrFaster", "Backward or faster",
+		source, "ReplaySource.BackwardOrFaster",
+		obs_module_text("BackwardOrFaster"),
 		replay_backward_or_faster_hotkey, context);
 
 	context->disable_hotkey = obs_hotkey_register_source(
@@ -2234,23 +2239,23 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 
 	context->disable_next_scene_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.DisableNextScene",
-		obs_module_text("Disable next scene"),
+		obs_module_text("DisableNextScene"),
 		replay_disable_next_scene_hotkey, context);
 
 	context->enable_next_scene_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.EnableNextScene",
-		obs_module_text("Enable next scene"),
+		obs_module_text("EnableNextScene"),
 		replay_enable_next_scene_hotkey, context);
 
 	context->next_scene_current_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.NextSceneCurrent",
-		obs_module_text("Set next scene to current"),
+		obs_module_text("SetNextSceneToCurrent"),
 		replay_next_scene_current_hotkey, context);
 
-	context->next_scene_hotkey = obs_hotkey_register_source(
-		source, "ReplaySource.NextScene",
-		obs_module_text("Switch to next scene"),
-		replay_next_scene_hotkey, context);
+	context->next_scene_hotkey =
+		obs_hotkey_register_source(source, "ReplaySource.NextScene",
+					   obs_module_text("SwitchToNextScene"),
+					   replay_next_scene_hotkey, context);
 
 	return context;
 }
@@ -2381,6 +2386,7 @@ void replay_source_end_action(struct replay_source *context)
 	if (replay_count == 0) {
 		context->play = false;
 		context->end = true;
+		obs_source_media_ended(context->source);
 		return;
 	}
 	bool finish = false;
@@ -2392,6 +2398,7 @@ void replay_source_end_action(struct replay_source *context)
 		context->play = false;
 		context->end = true;
 		finish = true;
+		obs_source_media_ended(context->source);
 	} else if (context->end_action == END_ACTION_REVERSE ||
 		   (context->end_action == END_ACTION_REVERSE_ALL &&
 		    replay_count == 1)) {
@@ -2428,6 +2435,7 @@ void replay_source_end_action(struct replay_source *context)
 			} else {
 				context->play = false;
 				context->end = true;
+				obs_source_media_ended(context->source);
 			}
 		}
 	}
@@ -2639,6 +2647,7 @@ static void replay_source_tick(void *data, float seconds)
 	} else if (context->disabled) {
 		context->play = false;
 		context->end = true;
+		obs_source_media_ended(context->source);
 	}
 	if (!context->play) {
 		if (context->end &&
@@ -3030,6 +3039,7 @@ static void replay_source_tick(void *data, float seconds)
 				if (context->end_action != END_ACTION_LOOP) {
 					context->play = false;
 					context->end = true;
+					obs_source_media_ended(context->source);
 				} else if (context->current_replay.trim_end !=
 					   0) {
 					context->restart = true;
@@ -3192,109 +3202,135 @@ static obs_properties_t *replay_source_properties(void *data)
 	struct replay_source *s = data;
 
 	obs_properties_t *props = obs_properties_create();
-	obs_property_t *prop = obs_properties_add_list(props, SETTING_SOURCE,
-						       TEXT_SOURCE,
-						       OBS_COMBO_TYPE_EDITABLE,
-						       OBS_COMBO_FORMAT_STRING);
+	obs_property_t *prop = obs_properties_add_list(
+		props, SETTING_SOURCE, obs_module_text("VideoSource"),
+		OBS_COMBO_TYPE_EDITABLE, OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_sources(EnumVideoSources, prop);
 	obs_enum_scenes(EnumVideoSources, prop);
 	obs_property_set_modified_callback(prop, replay_video_source_modified);
 	obs_properties_add_bool(props, SETTING_INTERNAL_FRAMES,
-				"Capture internal frames");
+				obs_module_text("CaptureInternalFrames"));
 
 	prop = obs_properties_add_list(props, SETTING_SOURCE_AUDIO,
-				       TEXT_SOURCE_AUDIO,
+				       obs_module_text("AudioSource"),
 				       OBS_COMBO_TYPE_EDITABLE,
 				       OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_sources(EnumAudioSources, prop);
 
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION,
-			       SETTING_DURATION_MIN, SETTING_DURATION_MAX,
-			       1000);
-	obs_properties_add_int(props, SETTING_RETRIEVE_DELAY,
-			       TEXT_RETRIEVE_DELAY, 0, 100000, 1000);
-	obs_properties_add_int(props, SETTING_REPLAYS, TEXT_REPLAYS, 1, 10, 1);
+	prop = obs_properties_add_int(props, SETTING_DURATION,
+				      obs_module_text("Duration"),
+				      SETTING_DURATION_MIN,
+				      SETTING_DURATION_MAX, 1000);
+	obs_property_int_set_suffix(prop, "ms");
+	prop = obs_properties_add_int(props, SETTING_RETRIEVE_DELAY,
+				      obs_module_text("LoadDelay"), 0, 100000,
+				      1000);
+	obs_property_int_set_suffix(prop, "ms");
+	obs_properties_add_int(props, SETTING_REPLAYS,
+			       obs_module_text("MaxReplays"), 1, 10, 1);
 
 	prop = obs_properties_add_list(props, SETTING_VISIBILITY_ACTION,
-				       "Visibility Action", OBS_COMBO_TYPE_LIST,
-				       OBS_COMBO_FORMAT_INT);
-	obs_property_list_add_int(prop, "Restart", VISIBILITY_ACTION_RESTART);
-	obs_property_list_add_int(prop, "Pause", VISIBILITY_ACTION_PAUSE);
-	obs_property_list_add_int(prop, "Continue", VISIBILITY_ACTION_CONTINUE);
-	obs_property_list_add_int(prop, "None", VISIBILITY_ACTION_NONE);
-
-	obs_properties_add_int(props, SETTING_START_DELAY, TEXT_START_DELAY,
-			       -100000, 100000, 1000);
-
-	prop = obs_properties_add_list(props, SETTING_END_ACTION, "End Action",
+				       obs_module_text("VisibilityAction"),
 				       OBS_COMBO_TYPE_LIST,
 				       OBS_COMBO_FORMAT_INT);
-	obs_property_list_add_int(prop, "Hide after single", END_ACTION_HIDE);
-	obs_property_list_add_int(prop, "Hide after all", END_ACTION_HIDE_ALL);
-	obs_property_list_add_int(prop, "Pause after single", END_ACTION_PAUSE);
-	obs_property_list_add_int(prop, "Pause after all",
+	obs_property_list_add_int(prop, obs_module_text("Restart"),
+				  VISIBILITY_ACTION_RESTART);
+	obs_property_list_add_int(prop, obs_module_text("Pause"),
+				  VISIBILITY_ACTION_PAUSE);
+	obs_property_list_add_int(prop, obs_module_text("Continue"),
+				  VISIBILITY_ACTION_CONTINUE);
+	obs_property_list_add_int(prop, obs_module_text("None"),
+				  VISIBILITY_ACTION_NONE);
+
+	prop = obs_properties_add_int(props, SETTING_START_DELAY,
+				      obs_module_text("StartDelay"), -100000,
+				      100000, 1000);
+	obs_property_int_set_suffix(prop, "ms");
+
+	prop = obs_properties_add_list(props, SETTING_END_ACTION,
+				       obs_module_text("EndAction"),
+				       OBS_COMBO_TYPE_LIST,
+				       OBS_COMBO_FORMAT_INT);
+	obs_property_list_add_int(prop, obs_module_text("HideAfterSingle"),
+				  END_ACTION_HIDE);
+	obs_property_list_add_int(prop, obs_module_text("HideAfterAll"),
+				  END_ACTION_HIDE_ALL);
+	obs_property_list_add_int(prop, obs_module_text("PauseAfterSingle"),
+				  END_ACTION_PAUSE);
+	obs_property_list_add_int(prop, obs_module_text("PauseAfterAll"),
 				  END_ACTION_PAUSE_ALL);
-	obs_property_list_add_int(prop, "Loop single", END_ACTION_LOOP);
-	obs_property_list_add_int(prop, "Loop all", END_ACTION_LOOP_ALL);
-	obs_property_list_add_int(prop, "Reverse after single",
+	obs_property_list_add_int(prop, obs_module_text("LoopSingle"),
+				  END_ACTION_LOOP);
+	obs_property_list_add_int(prop, obs_module_text("LoopAll"),
+				  END_ACTION_LOOP_ALL);
+	obs_property_list_add_int(prop, obs_module_text("ReverseAfterSingle"),
 				  END_ACTION_REVERSE);
-	obs_property_list_add_int(prop, "Reverse after all",
+	obs_property_list_add_int(prop, obs_module_text("ReverseAfterAll"),
 				  END_ACTION_REVERSE_ALL);
 
 	prop = obs_properties_add_list(props, SETTING_NEXT_SCENE,
-				       TEXT_NEXT_SCENE, OBS_COMBO_TYPE_EDITABLE,
+				       obs_module_text("NextScene"),
+				       OBS_COMBO_TYPE_EDITABLE,
 				       OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_scenes(EnumScenes, prop);
 
 	obs_properties_add_float_slider(props, SETTING_SPEED,
-					"Speed percentage", SETTING_SPEED_MIN,
-					SETTING_SPEED_MAX, 1.0);
-	obs_properties_add_bool(props, SETTING_BACKWARD, "Backwards");
+					obs_module_text("SpeedPercentage"),
+					SETTING_SPEED_MIN, SETTING_SPEED_MAX,
+					1.0);
+	obs_properties_add_bool(props, SETTING_BACKWARD,
+				obs_module_text("Backwards"));
 
-	obs_properties_add_path(props, SETTING_DIRECTORY, "Directory",
+	obs_properties_add_path(props, SETTING_DIRECTORY,
+				obs_module_text("Directory"),
 				OBS_PATH_DIRECTORY, NULL, NULL);
 	obs_properties_add_text(props, SETTING_FILE_FORMAT,
-				"Filename Formatting", OBS_TEXT_DEFAULT);
-	obs_properties_add_bool(props, SETTING_LOSSLESS, "Lossless");
+				obs_module_text("FilenameFormatting"),
+				OBS_TEXT_DEFAULT);
+	obs_properties_add_bool(props, SETTING_LOSSLESS,
+				obs_module_text("Lossless"));
 
 	prop = obs_properties_add_list(props, SETTING_PROGRESS_SOURCE,
-				       "Progress crop source",
+				       obs_module_text("ProgressCropSource"),
 				       OBS_COMBO_TYPE_EDITABLE,
 				       OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_sources(EnumVideoSources, prop);
 
 	prop = obs_properties_add_list(props, SETTING_TEXT_SOURCE,
-				       "Text source", OBS_COMBO_TYPE_EDITABLE,
+				       obs_module_text("TextSource"),
+				       OBS_COMBO_TYPE_EDITABLE,
 				       OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_sources(EnumTextSources, prop);
 	obs_property_set_modified_callback(prop, replay_text_source_modified);
 
-	obs_properties_add_text(props, SETTING_TEXT, "Text format",
+	obs_properties_add_text(props, SETTING_TEXT,
+				obs_module_text("TextFormat"),
 				OBS_TEXT_MULTILINE);
 
-	prop = obs_properties_add_bool(props, SETTING_SOUND_TRIGGER,
-				       "Sound trigger load replay");
+	prop = obs_properties_add_bool(
+		props, SETTING_SOUND_TRIGGER,
+		obs_module_text("SoundTriggerLoadReplay"));
 	obs_property_set_modified_callback(prop, replay_sound_trigger_modified);
 
 	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,
-					"Threshold db",
+					obs_module_text("ThresholdDb"),
 					SETTING_AUDIO_THRESHOLD_MIN,
 					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
 
 	prop = obs_properties_add_list(props, SETTING_LOAD_SWITCH_SCENE,
-				       "Load replay switch scene",
+				       obs_module_text("LoadReplaySwitchScene"),
 				       OBS_COMBO_TYPE_EDITABLE,
 				       OBS_COMBO_FORMAT_STRING);
 	obs_property_list_add_string(prop, "", "");
 	obs_enum_scenes(EnumScenes, prop);
 
-	obs_properties_add_button(props, "replay_button", "Load replay",
-				  replay_button);
+	obs_properties_add_button(props, "replay_button",
+				  obs_module_text("LoadReplay"), replay_button);
 
 	return props;
 }

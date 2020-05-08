@@ -2110,11 +2110,13 @@ static obs_properties_t *GetDShowReplayProperties(void *obj)
 	for (const AudioDevice &device : data->audioDevices)
 		AddAudioDevice(p, device);
 
-	obs_properties_add_int(ppts, SETTING_DURATION, TEXT_DURATION,
-			       SETTING_DURATION_MIN, SETTING_DURATION_MAX,
-			       1000);
+	p = obs_properties_add_int(ppts, SETTING_DURATION,
+				   obs_module_text("Duration"),
+				   SETTING_DURATION_MIN, SETTING_DURATION_MAX,
+				   1000);
+	obs_property_int_set_suffix(p, "ms");
 	obs_properties_add_float_slider(ppts, SETTING_AUDIO_THRESHOLD,
-					"Threshold db",
+					obs_module_text("ThresholdDb"),
 					SETTING_AUDIO_THRESHOLD_MIN,
 					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
 	return ppts;

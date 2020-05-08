@@ -134,12 +134,12 @@ void free_audio_packet(struct obs_audio_data *audio)
 
 const char *obs_module_name(void)
 {
-	return "Replay source";
+	return obs_module_text("ReplaySource");
 }
 
 const char *obs_module_description(void)
 {
-	return "Plugin to (slow motion) instant replay sources from memory.";
+	return obs_module_text("Description");
 }
 
 const char *obs_module_author(void)

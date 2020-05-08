@@ -12,7 +12,7 @@
 static const char *replay_filter_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return TEXT_FILTER_NAME;
+	return obs_module_text("ReplayFilter");
 }
 
 static inline void copy_frame_data_line(struct obs_source_frame *dst,
@@ -247,9 +247,10 @@ static obs_properties_t *replay_filter_properties(void *unused)
 
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION,
-			       SETTING_DURATION_MIN, SETTING_DURATION_MAX,
-			       1000);
+	obs_property_t *prop = obs_properties_add_int(
+		props, SETTING_DURATION, obs_module_text("Duration"),
+		SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
+	obs_property_int_set_suffix(prop, "ms");
 
 	return props;
 }

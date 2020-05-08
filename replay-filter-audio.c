@@ -11,7 +11,7 @@
 static const char *replay_filter_get_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return TEXT_FILTER_AUDIO_NAME;
+	return obs_module_text("ReplayFilterAudio");
 }
 
 static void replay_filter_update(void *data, obs_data_t *settings)
@@ -72,11 +72,12 @@ static obs_properties_t *replay_filter_properties(void *unused)
 
 	obs_properties_t *props = obs_properties_create();
 
-	obs_properties_add_int(props, SETTING_DURATION, TEXT_DURATION,
-			       SETTING_DURATION_MIN, SETTING_DURATION_MAX,
-			       1000);
+	obs_property_t *prop = obs_properties_add_int(
+		props, SETTING_DURATION, obs_module_text("Duration"),
+		SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
+	obs_property_int_set_suffix(prop, "ms");
 	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,
-					"Threshold db",
+					obs_module_text("ThresholdDb"),
 					SETTING_AUDIO_THRESHOLD_MIN,
 					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
 
