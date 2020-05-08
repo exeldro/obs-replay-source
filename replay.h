@@ -83,6 +83,7 @@ void replay_filter_check(struct replay_filter *filter);
 #define SETTING_AUDIO_THRESHOLD_MIN -60.0
 #define SETTING_AUDIO_THRESHOLD_MAX 0.0f
 #define SETTING_LOAD_SWITCH_SCENE "load_switch_scene"
+#define SETTING_EXECUTE_ACTION "execute_action"
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL

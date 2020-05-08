@@ -648,325 +648,6 @@ void replay_trigger_threshold(void *data)
 	}
 }
 
-static void replay_source_update(void *data, obs_data_t *settings)
-{
-	struct replay_source *context = data;
-	const char *source_name = obs_data_get_string(settings, SETTING_SOURCE);
-	if (context->source_name) {
-		if (strcmp(context->source_name, source_name) != 0 ||
-		    context->disabled) {
-			obs_source_t *s =
-				obs_get_source_by_name(context->source_name);
-			if (s) {
-				do {
-					context->source_filter = NULL;
-					obs_source_enum_filters(s, EnumFilter,
-								data);
-					if (context->source_filter) {
-						obs_source_filter_remove(
-							s,
-							context->source_filter);
-					}
-				} while (context->source_filter);
-				obs_source_release(s);
-			}
-			if (strcmp(context->source_name, source_name) != 0) {
-				bfree(context->source_name);
-				context->source_name = bstrdup(source_name);
-			}
-		}
-	} else {
-		context->source_name = bstrdup(source_name);
-	}
-	const char *source_audio_name =
-		obs_data_get_string(settings, SETTING_SOURCE_AUDIO);
-	if (context->source_audio_name) {
-		if (strcmp(context->source_audio_name, source_audio_name) !=
-			    0 ||
-		    context->disabled) {
-			obs_source_t *s = obs_get_source_by_name(
-				context->source_audio_name);
-			if (s) {
-				do {
-					context->source_audio_filter = NULL;
-					obs_source_enum_filters(
-						s, EnumAudioFilter, data);
-					if (context->source_audio_filter) {
-						obs_source_filter_remove(
-							s,
-							context->source_audio_filter);
-					}
-				} while (context->source_audio_filter);
-				obs_source_release(s);
-			}
-			if (strcmp(context->source_audio_name,
-				   source_audio_name) != 0) {
-				bfree(context->source_audio_name);
-				context->source_audio_name =
-					bstrdup(source_audio_name);
-			}
-		}
-	} else {
-		context->source_audio_name = bstrdup(source_audio_name);
-	}
-	const char *next_scene_name =
-		obs_data_get_string(settings, SETTING_NEXT_SCENE);
-	if (context->next_scene_name) {
-		if (strcmp(context->next_scene_name, next_scene_name) != 0) {
-			bfree(context->next_scene_name);
-			context->next_scene_name = bstrdup(next_scene_name);
-		}
-	} else {
-		context->next_scene_name = bstrdup(next_scene_name);
-	}
-
-	const char *load_switch_scene_name =
-		obs_data_get_string(settings, SETTING_LOAD_SWITCH_SCENE);
-	if (context->load_switch_scene_name) {
-		if (strcmp(context->load_switch_scene_name,
-			   load_switch_scene_name) != 0) {
-			bfree(context->load_switch_scene_name);
-			context->load_switch_scene_name =
-				bstrdup(load_switch_scene_name);
-		}
-	} else {
-		context->load_switch_scene_name =
-			bstrdup(load_switch_scene_name);
-	}
-
-	context->visibility_action =
-		(int)obs_data_get_int(settings, SETTING_VISIBILITY_ACTION);
-	context->end_action =
-		(int)obs_data_get_int(settings, SETTING_END_ACTION);
-	context->start_delay =
-		obs_data_get_int(settings, SETTING_START_DELAY) * 1000000;
-	context->retrieve_delay =
-		obs_data_get_int(settings, SETTING_RETRIEVE_DELAY) * 1000000;
-
-	context->replay_max = (int)obs_data_get_int(settings, SETTING_REPLAYS);
-	replay_purge_replays(context);
-
-	context->speed_percent = obs_data_get_double(settings, SETTING_SPEED);
-	if (context->speed_percent < SETTING_SPEED_MIN ||
-	    context->speed_percent > SETTING_SPEED_MAX)
-		context->speed_percent = 100.0f;
-
-	context->backward_start = obs_data_get_bool(settings, SETTING_BACKWARD);
-	if (context->backward != context->backward_start) {
-		replay_reverse_hotkey(context, 0, NULL, true);
-	}
-	context->sound_trigger =
-		obs_data_get_bool(settings, SETTING_SOUND_TRIGGER);
-	if (!context->disabled) {
-
-		obs_source_t *s = NULL;
-		if (strcmp(context->source_name,
-			   obs_source_get_name(context->source)) != 0) {
-			s = obs_get_source_by_name(context->source_name);
-		}
-		if (s) {
-			if (strcmp(obs_source_get_unversioned_id(s),
-				   "dshow_input_replay") == 0) {
-				if (obs_obj_get_data(s)) {
-					obs_source_update(s, settings);
-					((struct replay_filter *)
-						 obs_obj_get_data(s))
-						->threshold_data = data;
-					((struct replay_filter *)
-						 obs_obj_get_data(s))
-						->trigger_threshold =
-						context->sound_trigger
-							? replay_trigger_threshold
-							: NULL;
-					context->filter_loaded = true;
-					info("connected to dshow '%s'",
-					     context->source_name);
-				}
-			} else {
-				context->source_filter = NULL;
-				obs_source_enum_filters(s, EnumFilter, data);
-				if (!context->source_filter) {
-					if ((obs_source_get_output_flags(s) &
-					     OBS_SOURCE_ASYNC) ==
-					    OBS_SOURCE_ASYNC) {
-						context->source_filter = obs_source_create_private(
-							REPLAY_FILTER_ASYNC_ID,
-							obs_source_get_name(
-								context->source),
-							settings);
-						info("created async filter for '%s'",
-						     context->source_name);
-					} else {
-						context->source_filter =
-							obs_source_create_private(
-								REPLAY_FILTER_ID,
-								obs_source_get_name(
-									context->source),
-								settings);
-						info("created filter for '%s'",
-						     context->source_name);
-					}
-					if (context->source_filter) {
-						obs_source_filter_add(
-							s,
-							context->source_filter);
-					}
-				} else if (obs_obj_get_data(
-						   context->source_filter)) {
-					obs_source_update(
-						context->source_filter,
-						settings);
-					info("updated filter for '%s'",
-					     context->source_name);
-				}
-				if (obs_obj_get_data(context->source_filter)) {
-					((struct replay_filter *)
-						 obs_obj_get_data(
-							 context->source_filter))
-						->threshold_data = data;
-					((struct replay_filter *)
-						 obs_obj_get_data(
-							 context->source_filter))
-						->trigger_threshold =
-						context->sound_trigger
-							? replay_trigger_threshold
-							: NULL;
-					context->filter_loaded = true;
-					info("connected to '%s'",
-					     context->source_name);
-				}
-			}
-			obs_source_release(s);
-		}
-		s = NULL;
-		if (strcmp(context->source_audio_name,
-			   obs_source_get_name(context->source)) != 0) {
-			s = obs_get_source_by_name(context->source_audio_name);
-		}
-		if (s) {
-			if (strcmp(obs_source_get_unversioned_id(s),
-				   "dshow_input_replay") == 0) {
-				if (obs_obj_get_data(s)) {
-					obs_source_update(s, settings);
-					((struct replay_filter *)
-						 obs_obj_get_data(s))
-						->threshold_data = data;
-					((struct replay_filter *)
-						 obs_obj_get_data(s))
-						->trigger_threshold =
-						context->sound_trigger
-							? replay_trigger_threshold
-							: NULL;
-					context->filter_loaded = true;
-					info("connected to dshow '%s'",
-					     context->source_audio_name);
-				}
-			} else {
-				context->source_audio_filter = NULL;
-				obs_source_enum_filters(s, EnumAudioVideoFilter,
-							data);
-				if (!context->source_audio_filter) {
-					if ((obs_source_get_output_flags(s) &
-					     OBS_SOURCE_AUDIO) != 0) {
-						context->source_audio_filter =
-							obs_source_create_private(
-								REPLAY_FILTER_AUDIO_ID,
-								obs_source_get_name(
-									context->source),
-								settings);
-						info("created audio filter for '%s'",
-						     context->source_audio_name);
-					}
-					if (context->source_audio_filter) {
-						obs_source_filter_add(
-							s,
-							context->source_audio_filter);
-					}
-				} else if (obs_obj_get_data(
-						   context->source_audio_filter)) {
-					obs_source_update(
-						context->source_audio_filter,
-						settings);
-					info("updated audio filter for '%s'",
-					     context->source_audio_name);
-				}
-				if (obs_obj_get_data(
-					    context->source_audio_filter)) {
-					((struct replay_filter *)obs_obj_get_data(
-						 context->source_audio_filter))
-						->threshold_data = data;
-					((struct replay_filter *)obs_obj_get_data(
-						 context->source_audio_filter))
-						->trigger_threshold =
-						context->sound_trigger
-							? replay_trigger_threshold
-							: NULL;
-					context->filter_loaded = true;
-					info("connected to '%s'",
-					     context->source_audio_name);
-				}
-			}
-			obs_source_release(s);
-		}
-	}
-	const char *file_format =
-		obs_data_get_string(settings, SETTING_FILE_FORMAT);
-	if (context->file_format) {
-		if (strcmp(context->file_format, file_format) != 0) {
-			bfree(context->file_format);
-			context->file_format = bstrdup(file_format);
-		}
-	} else {
-		context->file_format = bstrdup(file_format);
-	}
-	const char *progress_source =
-		obs_data_get_string(settings, SETTING_PROGRESS_SOURCE);
-	if (context->progress_source_name) {
-		if (strcmp(context->progress_source_name, progress_source) !=
-		    0) {
-			bfree(context->progress_source_name);
-			context->progress_source_name =
-				bstrdup(progress_source);
-		}
-	} else {
-		context->progress_source_name = bstrdup(progress_source);
-	}
-
-	const char *text_source =
-		obs_data_get_string(settings, SETTING_TEXT_SOURCE);
-	if (context->text_source_name) {
-		if (strcmp(context->text_source_name, text_source) != 0) {
-			bfree(context->text_source_name);
-			context->text_source_name = bstrdup(text_source);
-		}
-	} else {
-		context->text_source_name = bstrdup(text_source);
-	}
-
-	const char *text = obs_data_get_string(settings, SETTING_TEXT);
-	if (context->text_format) {
-		if (strcmp(context->text_format, text) != 0) {
-			bfree(context->text_format);
-			context->text_format = bstrdup(text);
-		}
-	} else {
-		context->text_format = bstrdup(text);
-	}
-
-	context->lossless = obs_data_get_bool(settings, SETTING_LOSSLESS);
-	const char *directory =
-		obs_data_get_string(settings, SETTING_DIRECTORY);
-	if (context->directory) {
-		if (strcmp(context->directory, directory) != 0) {
-			bfree(context->directory);
-			context->directory = bstrdup(directory);
-		}
-	} else {
-		context->directory = bstrdup(directory);
-	}
-	replay_update_text(context);
-}
-
 static void replay_source_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_int(settings, SETTING_DURATION, 5000);
@@ -1589,9 +1270,7 @@ static void replay_disable_hotkey(void *data, obs_hotkey_id id,
 		return;
 
 	c->disabled = true;
-	obs_data_t *settings = obs_source_get_settings(c->source);
-	replay_source_update(data, settings);
-	obs_data_release(settings);
+	obs_source_update(c->source, NULL);
 }
 
 static void replay_enable_hotkey(void *data, obs_hotkey_id id,
@@ -1605,9 +1284,7 @@ static void replay_enable_hotkey(void *data, obs_hotkey_id id,
 		return;
 
 	c->disabled = false;
-	obs_data_t *settings = obs_source_get_settings(c->source);
-	replay_source_update(data, settings);
-	obs_data_release(settings);
+	obs_source_update(c->source, NULL);
 }
 
 static void replay_disable_next_scene_hotkey(void *data, obs_hotkey_id id,
@@ -1766,7 +1443,7 @@ static void replay_last_hotkey(void *data, obs_hotkey_id id,
 
 	context->replay_position = replay_count - 1;
 	replay_update_position(context, true);
-	info("first hotkey switched to replay %i/%i",
+	info("last hotkey switched to replay %i/%i",
 	     context->replay_position + 1, replay_count);
 }
 
@@ -2109,6 +1786,399 @@ static void replay_trim_reset_hotkey(void *data, obs_hotkey_id id,
 		r->trim_end = c->current_replay.trim_end;
 		r->trim_front = c->current_replay.trim_front;
 	}
+}
+
+static void replay_source_update(void *data, obs_data_t *settings)
+{
+	struct replay_source *context = data;
+	const char *execute_action =
+		obs_data_get_string(settings, SETTING_EXECUTE_ACTION);
+	if (execute_action && strlen(execute_action)) {
+		if (strcmp(execute_action, "Load") == 0) {
+			replay_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Next") == 0) {
+			replay_next_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Previous") == 0) {
+			replay_previous_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "First") == 0) {
+			replay_first_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Last") == 0) {
+			replay_last_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Remove") == 0) {
+			replay_remove_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Clear") == 0) {
+			replay_clear_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Save") == 0) {
+			replay_save_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Restart") == 0) {
+			replay_restart_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Pause") == 0) {
+			replay_pause_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Faster") == 0) {
+			replay_faster_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Slower") == 0) {
+			replay_slower_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "NormalOrFaster") == 0) {
+			replay_normal_or_faster_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "NormalOrSlower") == 0) {
+			replay_normal_or_slower_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "NormalSpeed") == 0) {
+			replay_normal_speed_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "HalfSpeed") == 0) {
+			replay_half_speed_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "DoubleSpeed") == 0) {
+			replay_double_speed_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "TrimFront") == 0) {
+			replay_trim_front_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "TrimEnd") == 0) {
+			replay_trim_end_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "TrimReset") == 0) {
+			replay_trim_reset_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Reverse") == 0) {
+			replay_reverse_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Backward") == 0) {
+			replay_backward_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Forward") == 0) {
+			replay_forward_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "ForwardOrFaster") == 0) {
+			replay_forward_or_faster_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "BackwardOrFaster") == 0) {
+			replay_backward_or_faster_hotkey(context, 0, NULL,
+							 true);
+		} else if (strcmp(execute_action, "BackwardOrFaster") == 0) {
+			replay_backward_or_faster_hotkey(context, 0, NULL,
+							 true);
+		} else if (strcmp(execute_action, "DisableNextScene") == 0) {
+			context->next_scene_disabled = true;
+		} else if (strcmp(execute_action, "EnableNextScene") == 0) {
+			context->next_scene_disabled = false;
+		} else if (strcmp(execute_action, "Disable") == 0) {
+			context->disabled = true;
+		} else if (strcmp(execute_action, "Enable") == 0) {
+			context->disabled = false;
+		} else if (strcmp(execute_action, "SetNextSceneToCurrent") ==
+			   0) {
+			replay_next_scene_current_hotkey(context, 0, NULL,
+							 true);
+		} else if (strcmp(execute_action, "SwitchToNextScene") == 0) {
+			replay_next_scene_hotkey(context, 0, NULL, true);
+		}
+		obs_data_erase(settings, SETTING_EXECUTE_ACTION);
+	}
+	const char *source_name = obs_data_get_string(settings, SETTING_SOURCE);
+	if (context->source_name) {
+		if (strcmp(context->source_name, source_name) != 0 ||
+		    context->disabled) {
+			obs_source_t *s =
+				obs_get_source_by_name(context->source_name);
+			if (s) {
+				do {
+					context->source_filter = NULL;
+					obs_source_enum_filters(s, EnumFilter,
+								data);
+					if (context->source_filter) {
+						obs_source_filter_remove(
+							s,
+							context->source_filter);
+					}
+				} while (context->source_filter);
+				obs_source_release(s);
+			}
+			if (strcmp(context->source_name, source_name) != 0) {
+				bfree(context->source_name);
+				context->source_name = bstrdup(source_name);
+			}
+		}
+	} else {
+		context->source_name = bstrdup(source_name);
+	}
+	const char *source_audio_name =
+		obs_data_get_string(settings, SETTING_SOURCE_AUDIO);
+	if (context->source_audio_name) {
+		if (strcmp(context->source_audio_name, source_audio_name) !=
+			    0 ||
+		    context->disabled) {
+			obs_source_t *s = obs_get_source_by_name(
+				context->source_audio_name);
+			if (s) {
+				do {
+					context->source_audio_filter = NULL;
+					obs_source_enum_filters(
+						s, EnumAudioFilter, data);
+					if (context->source_audio_filter) {
+						obs_source_filter_remove(
+							s,
+							context->source_audio_filter);
+					}
+				} while (context->source_audio_filter);
+				obs_source_release(s);
+			}
+			if (strcmp(context->source_audio_name,
+				   source_audio_name) != 0) {
+				bfree(context->source_audio_name);
+				context->source_audio_name =
+					bstrdup(source_audio_name);
+			}
+		}
+	} else {
+		context->source_audio_name = bstrdup(source_audio_name);
+	}
+	const char *next_scene_name =
+		obs_data_get_string(settings, SETTING_NEXT_SCENE);
+	if (context->next_scene_name) {
+		if (strcmp(context->next_scene_name, next_scene_name) != 0) {
+			bfree(context->next_scene_name);
+			context->next_scene_name = bstrdup(next_scene_name);
+		}
+	} else {
+		context->next_scene_name = bstrdup(next_scene_name);
+	}
+
+	const char *load_switch_scene_name =
+		obs_data_get_string(settings, SETTING_LOAD_SWITCH_SCENE);
+	if (context->load_switch_scene_name) {
+		if (strcmp(context->load_switch_scene_name,
+			   load_switch_scene_name) != 0) {
+			bfree(context->load_switch_scene_name);
+			context->load_switch_scene_name =
+				bstrdup(load_switch_scene_name);
+		}
+	} else {
+		context->load_switch_scene_name =
+			bstrdup(load_switch_scene_name);
+	}
+
+	context->visibility_action =
+		(int)obs_data_get_int(settings, SETTING_VISIBILITY_ACTION);
+	context->end_action =
+		(int)obs_data_get_int(settings, SETTING_END_ACTION);
+	context->start_delay =
+		obs_data_get_int(settings, SETTING_START_DELAY) * 1000000;
+	context->retrieve_delay =
+		obs_data_get_int(settings, SETTING_RETRIEVE_DELAY) * 1000000;
+
+	context->replay_max = (int)obs_data_get_int(settings, SETTING_REPLAYS);
+	replay_purge_replays(context);
+
+	context->speed_percent = obs_data_get_double(settings, SETTING_SPEED);
+	if (context->speed_percent < SETTING_SPEED_MIN ||
+	    context->speed_percent > SETTING_SPEED_MAX)
+		context->speed_percent = 100.0f;
+
+	context->backward_start = obs_data_get_bool(settings, SETTING_BACKWARD);
+	if (context->backward != context->backward_start) {
+		replay_reverse_hotkey(context, 0, NULL, true);
+	}
+	context->sound_trigger =
+		obs_data_get_bool(settings, SETTING_SOUND_TRIGGER);
+	if (!context->disabled) {
+
+		obs_source_t *s = NULL;
+		if (strcmp(context->source_name,
+			   obs_source_get_name(context->source)) != 0) {
+			s = obs_get_source_by_name(context->source_name);
+		}
+		if (s) {
+			if (strcmp(obs_source_get_unversioned_id(s),
+				   "dshow_input_replay") == 0) {
+				if (obs_obj_get_data(s)) {
+					obs_source_update(s, settings);
+					((struct replay_filter *)
+						 obs_obj_get_data(s))
+						->threshold_data = data;
+					((struct replay_filter *)
+						 obs_obj_get_data(s))
+						->trigger_threshold =
+						context->sound_trigger
+							? replay_trigger_threshold
+							: NULL;
+					context->filter_loaded = true;
+					info("connected to dshow '%s'",
+					     context->source_name);
+				}
+			} else {
+				context->source_filter = NULL;
+				obs_source_enum_filters(s, EnumFilter, data);
+				if (!context->source_filter) {
+					if ((obs_source_get_output_flags(s) &
+					     OBS_SOURCE_ASYNC) ==
+					    OBS_SOURCE_ASYNC) {
+						context->source_filter = obs_source_create_private(
+							REPLAY_FILTER_ASYNC_ID,
+							obs_source_get_name(
+								context->source),
+							settings);
+						info("created async filter for '%s'",
+						     context->source_name);
+					} else {
+						context->source_filter =
+							obs_source_create_private(
+								REPLAY_FILTER_ID,
+								obs_source_get_name(
+									context->source),
+								settings);
+						info("created filter for '%s'",
+						     context->source_name);
+					}
+					if (context->source_filter) {
+						obs_source_filter_add(
+							s,
+							context->source_filter);
+					}
+				} else if (obs_obj_get_data(
+						   context->source_filter)) {
+					obs_source_update(
+						context->source_filter,
+						settings);
+					info("updated filter for '%s'",
+					     context->source_name);
+				}
+				if (obs_obj_get_data(context->source_filter)) {
+					((struct replay_filter *)
+						 obs_obj_get_data(
+							 context->source_filter))
+						->threshold_data = data;
+					((struct replay_filter *)
+						 obs_obj_get_data(
+							 context->source_filter))
+						->trigger_threshold =
+						context->sound_trigger
+							? replay_trigger_threshold
+							: NULL;
+					context->filter_loaded = true;
+					info("connected to '%s'",
+					     context->source_name);
+				}
+			}
+			obs_source_release(s);
+		}
+		s = NULL;
+		if (strcmp(context->source_audio_name,
+			   obs_source_get_name(context->source)) != 0) {
+			s = obs_get_source_by_name(context->source_audio_name);
+		}
+		if (s) {
+			if (strcmp(obs_source_get_unversioned_id(s),
+				   "dshow_input_replay") == 0) {
+				if (obs_obj_get_data(s)) {
+					obs_source_update(s, settings);
+					((struct replay_filter *)
+						 obs_obj_get_data(s))
+						->threshold_data = data;
+					((struct replay_filter *)
+						 obs_obj_get_data(s))
+						->trigger_threshold =
+						context->sound_trigger
+							? replay_trigger_threshold
+							: NULL;
+					context->filter_loaded = true;
+					info("connected to dshow '%s'",
+					     context->source_audio_name);
+				}
+			} else {
+				context->source_audio_filter = NULL;
+				obs_source_enum_filters(s, EnumAudioVideoFilter,
+							data);
+				if (!context->source_audio_filter) {
+					if ((obs_source_get_output_flags(s) &
+					     OBS_SOURCE_AUDIO) != 0) {
+						context->source_audio_filter =
+							obs_source_create_private(
+								REPLAY_FILTER_AUDIO_ID,
+								obs_source_get_name(
+									context->source),
+								settings);
+						info("created audio filter for '%s'",
+						     context->source_audio_name);
+					}
+					if (context->source_audio_filter) {
+						obs_source_filter_add(
+							s,
+							context->source_audio_filter);
+					}
+				} else if (obs_obj_get_data(
+						   context->source_audio_filter)) {
+					obs_source_update(
+						context->source_audio_filter,
+						settings);
+					info("updated audio filter for '%s'",
+					     context->source_audio_name);
+				}
+				if (obs_obj_get_data(
+					    context->source_audio_filter)) {
+					((struct replay_filter *)obs_obj_get_data(
+						 context->source_audio_filter))
+						->threshold_data = data;
+					((struct replay_filter *)obs_obj_get_data(
+						 context->source_audio_filter))
+						->trigger_threshold =
+						context->sound_trigger
+							? replay_trigger_threshold
+							: NULL;
+					context->filter_loaded = true;
+					info("connected to '%s'",
+					     context->source_audio_name);
+				}
+			}
+			obs_source_release(s);
+		}
+	}
+	const char *file_format =
+		obs_data_get_string(settings, SETTING_FILE_FORMAT);
+	if (context->file_format) {
+		if (strcmp(context->file_format, file_format) != 0) {
+			bfree(context->file_format);
+			context->file_format = bstrdup(file_format);
+		}
+	} else {
+		context->file_format = bstrdup(file_format);
+	}
+	const char *progress_source =
+		obs_data_get_string(settings, SETTING_PROGRESS_SOURCE);
+	if (context->progress_source_name) {
+		if (strcmp(context->progress_source_name, progress_source) !=
+		    0) {
+			bfree(context->progress_source_name);
+			context->progress_source_name =
+				bstrdup(progress_source);
+		}
+	} else {
+		context->progress_source_name = bstrdup(progress_source);
+	}
+
+	const char *text_source =
+		obs_data_get_string(settings, SETTING_TEXT_SOURCE);
+	if (context->text_source_name) {
+		if (strcmp(context->text_source_name, text_source) != 0) {
+			bfree(context->text_source_name);
+			context->text_source_name = bstrdup(text_source);
+		}
+	} else {
+		context->text_source_name = bstrdup(text_source);
+	}
+
+	const char *text = obs_data_get_string(settings, SETTING_TEXT);
+	if (context->text_format) {
+		if (strcmp(context->text_format, text) != 0) {
+			bfree(context->text_format);
+			context->text_format = bstrdup(text);
+		}
+	} else {
+		context->text_format = bstrdup(text);
+	}
+
+	context->lossless = obs_data_get_bool(settings, SETTING_LOSSLESS);
+	const char *directory =
+		obs_data_get_string(settings, SETTING_DIRECTORY);
+	if (context->directory) {
+		if (strcmp(context->directory, directory) != 0) {
+			bfree(context->directory);
+			context->directory = bstrdup(directory);
+		}
+	} else {
+		context->directory = bstrdup(directory);
+	}
+	replay_update_text(context);
 }
 
 static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
