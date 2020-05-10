@@ -1845,9 +1845,6 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		} else if (strcmp(execute_action, "BackwardOrFaster") == 0) {
 			replay_backward_or_faster_hotkey(context, 0, NULL,
 							 true);
-		} else if (strcmp(execute_action, "BackwardOrFaster") == 0) {
-			replay_backward_or_faster_hotkey(context, 0, NULL,
-							 true);
 		} else if (strcmp(execute_action, "DisableNextScene") == 0) {
 			context->next_scene_disabled = true;
 		} else if (strcmp(execute_action, "EnableNextScene") == 0) {
@@ -2190,8 +2187,6 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 	pthread_mutex_init(&context->replay_mutex, NULL);
 
 	circlebuf_init(&context->replays);
-
-	replay_source_update(context, settings);
 
 	context->replay_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.Replay", obs_module_text("LoadReplay"),
@@ -3525,6 +3520,7 @@ struct obs_source_info replay_source_info = {
 	.get_name = replay_source_get_name,
 	.create = replay_source_create,
 	.destroy = replay_source_destroy,
+	.load = replay_source_update,
 	.update = replay_source_update,
 	.get_defaults = replay_source_defaults,
 	.show = replay_source_show,
