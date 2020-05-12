@@ -5,9 +5,6 @@ if(MSVC)
 		w32-pthreads)
 endif()
 
-find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
-include_directories(${FFMPEG_INCLUDE_DIRS})
-
 set(replay-source_HEADERS
 	replay.h)
 set(replay-source_SOURCES
@@ -18,6 +15,9 @@ set(replay-source_SOURCES
 	replay-filter-async.c)
 
 if(WIN32)
+	find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
+	include_directories(${FFMPEG_INCLUDE_DIRS})
+	
 	list(APPEND replay-source_HEADERS
 		../win-dshow/ffmpeg-decode.h)
 	list(APPEND replay-source_SOURCES
