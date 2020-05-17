@@ -72,4 +72,5 @@ target_link_libraries(replay-source
 	${FFMPEG_LIBRARIES}
 	${replay-source_PLATFORM_DEPS})
 
+set_target_properties(replay-source PROPERTIES FOLDER "plugins/exeldro")
 install_obs_plugin_with_data(replay-source data)
