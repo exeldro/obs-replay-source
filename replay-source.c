@@ -1666,7 +1666,6 @@ static void replay_forward_or_faster_hotkey(void *data, obs_hotkey_id id,
 
 	if (c->backward) {
 		replay_forward_hotkey(data, id, hotkey, pressed);
-		replay_normal_speed_hotkey(data, id, hotkey, pressed);
 		return;
 	}
 	replay_normal_or_faster_hotkey(data, id, hotkey, pressed);
@@ -1684,7 +1683,6 @@ static void replay_backward_or_faster_hotkey(void *data, obs_hotkey_id id,
 		return;
 	if (!c->backward) {
 		replay_backward_hotkey(data, id, hotkey, pressed);
-		replay_normal_speed_hotkey(data, id, hotkey, pressed);
 		return;
 	}
 	replay_normal_or_faster_hotkey(data, id, hotkey, pressed);
