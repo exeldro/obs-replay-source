@@ -3292,7 +3292,7 @@ static obs_properties_t *replay_source_properties(void *data)
 				      1000);
 	obs_property_int_set_suffix(prop, "ms");
 	obs_properties_add_int(props, SETTING_REPLAYS,
-			       obs_module_text("MaxReplays"), 1, 10, 1);
+			       obs_module_text("MaxReplays"), 1, 20, 1);
 
 	prop = obs_properties_add_list(props, SETTING_VISIBILITY_ACTION,
 				       obs_module_text("VisibilityAction"),
