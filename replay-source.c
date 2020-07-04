@@ -186,7 +186,8 @@ static void replay_update_text(struct replay_source *c)
 		const char *cmp = sf.array + pos;
 		if (astrcmp_n(cmp, "%SPEED%", 7) == 0) {
 			dstr_printf(&buffer, "%.1f",
-				    c->speed_percent * (c->backward ? -1 : 1));
+				    c->speed_percent *
+					    (c->backward ? -1.0f : 1.0f));
 			dstr_cat_ch(&buffer, '%');
 			replace_text(&sf, pos, 7, buffer.array);
 			pos += buffer.len;
@@ -239,7 +240,8 @@ static void replay_update_text(struct replay_source *c)
 					       c->start_timestamp;
 				}
 				if (c->speed_percent != 100.0f) {
-					time = time * c->speed_percent / 100.0;
+					time = (float)time * c->speed_percent /
+					       100.0;
 				}
 				dstr_printf(&buffer, "%.2f",
 					    (double)time /
@@ -375,6 +377,19 @@ static void EnumAudioVideoFilter(obs_source_t *source, obs_source_t *filter,
 		c->source_audio_filter = filter;
 }
 
+static inline void obs_source_signal(struct obs_source *source,
+				     const char *signal_source)
+{
+	struct calldata data;
+	uint8_t stack[128];
+
+	calldata_init_fixed(&data, stack, sizeof(stack));
+	calldata_set_ptr(&data, "source", source);
+	if (signal_source)
+		signal_handler_signal(obs_source_get_signal_handler(source),
+				      signal_source, &data);
+}
+
 static void replay_reverse_hotkey(void *data, obs_hotkey_id id,
 				  obs_hotkey_t *hotkey, bool pressed)
 {
@@ -390,7 +405,10 @@ static void replay_reverse_hotkey(void *data, obs_hotkey_id id,
 			c->pause_timestamp = 0;
 		}
 		c->backward = !c->backward;
-		c->play = true;
+		if (!c->play) {
+			c->play = true;
+			obs_source_signal(c->source, "media_play");
+		}
 		if (c->end) {
 			c->end = false;
 			if (c->backward &&
@@ -428,7 +446,10 @@ static void replay_forward_hotkey(void *data, obs_hotkey_id id,
 		c->start_timestamp += time - c->pause_timestamp;
 		c->pause_timestamp = 0;
 	}
-	c->play = true;
+	if (!c->play) {
+		c->play = true;
+		obs_source_signal(c->source, "media_play");
+	}
 	if (c->end) {
 		c->end = false;
 		c->video_frame_position = 0;
@@ -464,7 +485,10 @@ static void replay_backward_hotkey(void *data, obs_hotkey_id id,
 		c->start_timestamp += time - c->pause_timestamp;
 		c->pause_timestamp = 0;
 	}
-	c->play = true;
+	if (!c->play) {
+		c->play = true;
+		obs_source_signal(c->source, "media_play");
+	}
 	if (c->end || c->video_frame_position == 0) {
 		c->end = false;
 		if (c->current_replay.video_frame_count)
@@ -550,9 +574,15 @@ static void replay_update_position(struct replay_source *context, bool lock)
 	}
 	if (context->active ||
 	    context->visibility_action == VISIBILITY_ACTION_CONTINUE) {
-		context->play = true;
+		if (!context->play) {
+			context->play = true;
+			obs_source_signal(context->source, "media_play");
+		}
 	} else {
-		context->play = false;
+		if (context->play) {
+			context->play = false;
+			obs_source_signal(context->source, "media_pause");
+		}
 		context->pause_timestamp = obs_get_video_frame_time();
 	}
 
@@ -686,10 +716,12 @@ static void replay_source_active(void *data)
 					context->pause_timestamp;
 				context->pause_timestamp = 0;
 			}
+			obs_source_signal(context->source, "media_play");
 		}
 	} else if (context->visibility_action == VISIBILITY_ACTION_RESTART) {
 		context->play = true;
 		context->restart = true;
+		obs_source_signal(context->source, "media_restart");
 	}
 	context->active = true;
 }
@@ -701,9 +733,13 @@ static void replay_source_deactive(void *data)
 		if (context->play) {
 			context->play = false;
 			context->pause_timestamp = obs_get_video_frame_time();
+			obs_source_signal(context->source, "media_pause");
 		}
 	} else if (context->visibility_action == VISIBILITY_ACTION_RESTART) {
-		context->play = false;
+		if (context->play) {
+			context->play = false;
+			obs_source_signal(context->source, "media_pause");
+		}
 		context->restart = true;
 	}
 	context->active = false;
@@ -720,6 +756,7 @@ static void replay_restart_hotkey(void *data, obs_hotkey_id id,
 	if (pressed) {
 		c->restart = true;
 		c->play = true;
+		obs_source_signal(c->source, "media_restart");
 	}
 }
 
@@ -735,6 +772,7 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 		if (c->play) {
 			c->play = false;
 			c->pause_timestamp = obs_get_video_frame_time();
+			obs_source_signal(c->source, "media_pause");
 		} else {
 			c->play = true;
 			if (c->pause_timestamp) {
@@ -743,6 +781,7 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 					c->pause_timestamp;
 				c->pause_timestamp = 0;
 			}
+			obs_source_signal(c->source, "media_play");
 		}
 	}
 }
@@ -1500,6 +1539,7 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id,
 	context->replay_position = 0;
 	context->end = true;
 	context->play = false;
+	obs_source_media_ended(context->source);
 	pthread_mutex_unlock(&context->audio_mutex);
 	pthread_mutex_unlock(&context->video_mutex);
 	struct obs_source_frame *f =
@@ -2706,7 +2746,10 @@ static void replay_source_tick(void *data, float seconds)
 	pthread_mutex_lock(&context->video_mutex);
 	if (!context->current_replay.video_frame_count &&
 	    !context->current_replay.audio_frame_count) {
-		context->play = false;
+		if (context->play) {
+			context->play = false;
+			obs_source_signal(context->source, "media_pause");
+		}
 	} else if (context->disabled) {
 		context->play = false;
 		context->end = true;
@@ -2724,7 +2767,10 @@ static void replay_source_tick(void *data, float seconds)
 		pthread_mutex_unlock(&context->video_mutex);
 		return;
 	}
-	context->end = false;
+	if (context->end) {
+		context->end = false;
+		obs_source_media_started(context->source);
+	}
 
 	if (context->current_replay.video_frame_count) {
 		if (context->video_frame_position >=
@@ -3405,6 +3451,8 @@ void replay_play_pause(void *data, bool pause)
 		if (c->play) {
 			c->play = false;
 			c->pause_timestamp = obs_get_video_frame_time();
+			struct calldata data;
+			obs_source_signal(c->source, "media_pause");
 		} else {
 			c->play = true;
 			if (c->pause_timestamp) {
@@ -3413,6 +3461,7 @@ void replay_play_pause(void *data, bool pause)
 					c->pause_timestamp;
 				c->pause_timestamp = 0;
 			}
+			obs_source_signal(c->source, "media_play");
 		}
 	} else {
 		const int64_t time = obs_get_video_frame_time();
@@ -3434,6 +3483,7 @@ void replay_play_pause(void *data, bool pause)
 			}
 			c->start_timestamp = obs_get_video_frame_time();
 		}
+		obs_source_signal(c->source, "media_play");
 	}
 }
 void replay_restart(void *data)
@@ -3441,8 +3491,17 @@ void replay_restart(void *data)
 	struct replay_source *c = data;
 	c->restart = true;
 	c->play = true;
+	obs_source_signal(c->source, "media_restart");
 }
-void replay_stop(void *data) {}
+
+void replay_stop(void *data)
+{
+	struct replay_source *c = data;
+	c->play = false;
+	c->restart = true;
+	obs_source_media_ended(c->source);
+}
+
 void replay_next(void *data)
 {
 	struct replay_source *context = data;
@@ -3478,7 +3537,8 @@ void replay_previous(void *data)
 int64_t replay_get_duration(void *data)
 {
 	struct replay_source *c = data;
-	return c->current_replay.duration * c->speed_percent / 100.0;
+	return (c->current_replay.duration / c->speed_percent * 100.0) /
+	       1000000UL;
 }
 
 int64_t replay_get_time(void *data)
@@ -3491,14 +3551,22 @@ int64_t replay_get_time(void *data)
 		} else {
 			time = obs_get_video_frame_time() - c->start_timestamp;
 		}
-		if (c->speed_percent != 100.0f) {
-			time = time * c->speed_percent / 100.0;
-		}
-		return time;
+		return time / 1000000UL;
 	}
 	return 0;
 }
-void replay_set_time(void *data, int64_t seconds) {}
+void replay_set_time(void *data, int64_t seconds)
+{
+	struct replay_source *c = data;
+
+	if (c->pause_timestamp > c->start_timestamp) {
+		c->start_timestamp = c->pause_timestamp - seconds * 1000000UL;
+	} else {
+		c->start_timestamp =
+			obs_get_video_frame_time() - seconds * 1000000UL;
+	}
+}
+
 enum obs_media_state replay_get_state(void *data)
 {
 	struct replay_source *c = data;
