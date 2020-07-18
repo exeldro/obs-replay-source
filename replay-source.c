@@ -1094,6 +1094,13 @@ void replay_save(struct replay_source *context)
 	context->saving_status = SAVING_STATUS_SAVING;
 }
 
+static void *update_scene_thread(void *data)
+{
+	obs_source_t *scene = data;
+	obs_frontend_set_current_scene(scene);
+	return NULL;
+}
+
 static void replay_retrieve(struct replay_source *context)
 {
 	obs_source_t *s = obs_get_source_by_name(context->source_name);
@@ -1260,7 +1267,8 @@ static void replay_retrieve(struct replay_source *context)
 	if (context->load_switch_scene_name) {
 		s = obs_get_source_by_name(context->load_switch_scene_name);
 		if (s) {
-			obs_frontend_set_current_scene(s);
+			pthread_t thread;
+			pthread_create(&thread, NULL, update_scene_thread, s);
 			obs_source_release(s);
 		}
 	}
@@ -1395,7 +1403,9 @@ static void replay_next_scene_hotkey(void *data, obs_hotkey_id id,
 			obs_source_t *s =
 				obs_get_source_by_name(c->next_scene_name);
 			if (s) {
-				obs_frontend_set_current_scene(s);
+				pthread_t thread;
+				pthread_create(&thread, NULL,
+					       update_scene_thread, s);
 				obs_source_release(s);
 			}
 		}
@@ -1403,7 +1413,8 @@ static void replay_next_scene_hotkey(void *data, obs_hotkey_id id,
 	} else {
 		obs_source_t *s = obs_get_source_by_name(c->next_scene_name);
 		if (s) {
-			obs_frontend_set_current_scene(s);
+			pthread_t thread;
+			pthread_create(&thread, NULL, update_scene_thread, s);
 			obs_source_release(s);
 		}
 	}
@@ -2475,12 +2486,7 @@ static void replay_output_frame(struct replay_source *context,
 	replay_update_text(context);
 	replay_update_progress_crop(context, t);
 }
-static void *update_scene_thread(void *data)
-{
-	obs_source_t *scene = data;
-	obs_frontend_set_current_scene(scene);
-	return NULL;
-}
+
 
 void replay_source_end_action(struct replay_source *context)
 {
@@ -3251,7 +3257,7 @@ static bool EnumTextSources(void *data, obs_source_t *source)
 	obs_property_t *prop = data;
 	const char *source_id = obs_source_get_unversioned_id(source);
 	if (strcmp(source_id, "text_gdiplus") == 0 ||
-	    strcmp(source_id, "text_ft2_source"))
+	    strcmp(source_id, "text_ft2_source") == 0)
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
