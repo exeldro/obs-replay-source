@@ -7,7 +7,9 @@ https://obsproject.com/forum/resources/replay-source.686/
 https://github.com/exeldro/obs-replay-source/releases
 
 Unzip the download in the 64 bit plugins folder for example:
-C:\Program Files (x86)\obs-studio\obs-plugins\64bit
+C:\Program Files\obs-studio\
+or
+C:\Program Files (x86)\obs-studio\
 
 Start OBS Studio 64 bit
 Add a replay source.
