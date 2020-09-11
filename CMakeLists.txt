@@ -1,4 +1,5 @@
-project(replay-source)
+project(replay-source VERSION 1.6.5)
+set(PROJECT_FULL_NAME "Replay Source")
 
 if(MSVC)
 	set(replay-source_PLATFORM_DEPS
@@ -15,6 +16,16 @@ set(replay-source_SOURCES
 	replay-filter-async.c)
 
 if(WIN32)
+	get_filename_component(ISS_FILES_DIR "${CMAKE_BINARY_DIR}\\..\\package" ABSOLUTE)
+	file(TO_NATIVE_PATH "${ISS_FILES_DIR}" ISS_FILES_DIR)
+	get_filename_component(ISS_PACKAGE_DIR "${CMAKE_PACKAGE_PREFIX}\\.." ABSOLUTE)
+	file(TO_NATIVE_PATH "${ISS_PACKAGE_DIR}" ISS_PACKAGE_DIR)
+	get_filename_component(ISS_SOURCE_DIR "${PROJECT_SOURCE_DIR}" ABSOLUTE)
+	file(TO_NATIVE_PATH "${ISS_SOURCE_DIR}" ISS_SOURCE_DIR)
+	configure_file("installer.iss.in"
+			"${PROJECT_BINARY_DIR}/installer.iss"
+		)
+	configure_file(resource.rc.in replay-source.rc)
 	find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
 	include_directories(${FFMPEG_INCLUDE_DIRS})
 	
