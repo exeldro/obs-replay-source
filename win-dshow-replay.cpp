@@ -89,14 +89,24 @@ enum class BufferingType : int64_t { Auto, On, Off };
 void ffmpeg_log(void *bla, int level, const char *msg, va_list args)
 {
 	DStr str;
-	if (level == AV_LOG_WARNING)
+	if (level == AV_LOG_WARNING) {
 		dstr_copy(str, "warning: ");
-	else if (level == AV_LOG_ERROR)
+	} else if (level == AV_LOG_ERROR) {
+		/* only print first of this message to avoid spam */
+		static bool suppress_app_field_spam = false;
+		if (strcmp(msg, "unable to decode APP fields: %s\n") == 0) {
+			if (suppress_app_field_spam)
+				return;
+
+			suppress_app_field_spam = true;
+		}
+
 		dstr_copy(str, "error:   ");
-	else if (level < AV_LOG_ERROR)
+	} else if (level < AV_LOG_ERROR) {
 		dstr_copy(str, "fatal:   ");
-	else
+	} else {
 		return;
+	}
 
 	dstr_cat(str, msg);
 	if (dstr_end(str) == '\n')
@@ -175,6 +185,7 @@ struct DShowReplayInput {
 	video_range_type range;
 	obs_source_frame2 frame;
 	obs_source_audio audio;
+	long lastRotation = 0;
 
 	WinHandle semaphore;
 	WinHandle activated_event;
@@ -260,7 +271,8 @@ struct DShowReplayInput {
 				size_t size, long long ts);
 
 	void OnVideoData(const VideoConfig &config, unsigned char *data,
-			 size_t size, long long startTime, long long endTime);
+			 size_t size, long long startTime, long long endTime,
+			 long rotation);
 	void OnAudioData(const AudioConfig &config, unsigned char *data,
 			 size_t size, long long startTime, long long endTime);
 
@@ -664,8 +676,14 @@ void DShowReplayInput::OnEncodedVideoData(enum AVCodecID id,
 
 void DShowReplayInput::OnVideoData(const VideoConfig &config,
 				   unsigned char *data, size_t size,
-				   long long startTime, long long endTime)
+				   long long startTime, long long endTime,
+				   long rotation)
 {
+	if (rotation != lastRotation) {
+		lastRotation = rotation;
+		obs_source_set_async_rotation(source, rotation);
+	}
+
 	if (videoConfig.format == VideoFormat::H264) {
 		OnEncodedVideoData(AV_CODEC_ID_H264, data, size, startTime);
 		return;
@@ -685,8 +703,13 @@ void DShowReplayInput::OnVideoData(const VideoConfig &config,
 	frame.format = ConvertVideoFormat(config.format);
 	frame.flip = flip;
 
-	if (config.cy_flip)
-		frame.flip = !frame.flip;
+	/* YUV DIBS are always top-down */
+	if (config.format == VideoFormat::XRGB ||
+	    config.format == VideoFormat::ARGB) {
+		/* RGB DIBs are bottom-up by default */
+		if (!config.cy_flip)
+			frame.flip = !frame.flip;
+	}
 
 	if (videoConfig.format == VideoFormat::XRGB ||
 	    videoConfig.format == VideoFormat::ARGB) {
@@ -730,6 +753,7 @@ void DShowReplayInput::OnVideoData(const VideoConfig &config,
 		/* TODO: other formats */
 		return;
 	}
+
 	OnVideoOutput(&frame);
 	obs_source_output_video2(source, &frame);
 
@@ -1081,7 +1105,7 @@ bool DShowReplayInput::UpdateVideoConfig(obs_data_t *settings)
 	videoConfig.callback = std::bind(&DShowReplayInput::OnVideoData, this,
 					 placeholders::_1, placeholders::_2,
 					 placeholders::_3, placeholders::_4,
-					 placeholders::_5);
+					 placeholders::_5, placeholders::_6);
 
 	videoConfig.format = videoConfig.internalFormat;
 
@@ -1210,11 +1234,9 @@ DShowReplayInput::GetColorSpace(obs_data_t *settings) const
 
 	if (astrcmpi(space, "709") == 0)
 		return VIDEO_CS_709;
-	else if (astrcmpi(space, "601") == 0)
+	if (astrcmpi(space, "601") == 0)
 		return VIDEO_CS_601;
-	else
-		return (videoConfig.format == VideoFormat::HDYC) ? VIDEO_CS_709
-								 : VIDEO_CS_601;
+	return VIDEO_CS_DEFAULT;
 }
 
 inline enum video_range_type
@@ -1283,12 +1305,22 @@ static const char *GetDShowReplayInputName(void *)
 	return "Video Capture Device with replay buffer";
 }
 
+static void proc_activate(void *data, calldata_t *cd)
+{
+	bool activate = calldata_bool(cd, "active");
+	DShowReplayInput *input = reinterpret_cast<DShowReplayInput *>(data);
+	input->SetActive(activate);
+}
+
 static void *CreateDShowReplayInput(obs_data_t *settings, obs_source_t *source)
 {
 	DShowReplayInput *dshow = nullptr;
 
 	try {
 		dshow = new DShowReplayInput(source, settings);
+		proc_handler_t *ph = obs_source_get_proc_handler(source);
+		proc_handler_add(ph, "void activate(bool active)",
+				 proc_activate, dshow);
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Could not create device '%s': %s",
 		     obs_source_get_name(source), error);
