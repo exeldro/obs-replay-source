@@ -1,4 +1,4 @@
-project(replay-source VERSION 1.6.5)
+project(replay-source VERSION 1.6.6)
 set(PROJECT_FULL_NAME "Replay Source")
 
 if(MSVC)

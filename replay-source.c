@@ -36,8 +36,9 @@
 enum saving_status {
 	SAVING_STATUS_NONE = 0,
 	SAVING_STATUS_STARTING = 1,
-	SAVING_STATUS_SAVING = 2,
-	SAVING_STATUS_STOPPING = 3
+	SAVING_STATUS_STARTING2 = 2,
+	SAVING_STATUS_SAVING = 3,
+	SAVING_STATUS_STOPPING = 4
 };
 
 struct replay {
@@ -1091,7 +1092,7 @@ void replay_save(struct replay_source *context)
 		}
 		return;
 	}
-	context->saving_status = SAVING_STATUS_SAVING;
+	context->saving_status = SAVING_STATUS_STARTING2;
 }
 
 static void *update_scene_thread(void *data)
@@ -2619,6 +2620,12 @@ static void replay_source_tick(void *data, float seconds)
 
 	if (context->saving_status == SAVING_STATUS_STARTING) {
 		replay_save(context);
+	} else if (context->saving_status == SAVING_STATUS_STARTING2) {
+		if (obs_output_active(context->fileOutput) ||
+		    os_timestamp - context->start_save_timestamp >
+			    1000000000UL) {
+			context->saving_status = SAVING_STATUS_SAVING;
+		}
 	} else if (context->saving_status == SAVING_STATUS_SAVING) {
 		if (!obs_output_active(context->fileOutput)) {
 			const char *error =
@@ -2658,19 +2665,20 @@ static void replay_source_tick(void *data, float seconds)
 					     context->saving_replay
 						     .first_frame_timestamp;
 			}
+
+			struct video_frame output_frame;
+			if (video_output_lock_frame(context->video_output,
+						    &output_frame, 1,
+						    timestamp)) {
+				video_scaler_scale(context->scaler,
+						   output_frame.data,
+						   output_frame.linesize,
+						   frame->data,
+						   frame->linesize);
+				video_output_unlock_frame(
+					context->video_output);
+			}
 			if (timestamp <= os_timestamp) {
-				struct video_frame output_frame;
-				if (video_output_lock_frame(
-					    context->video_output,
-					    &output_frame, 1, timestamp)) {
-					video_scaler_scale(
-						context->scaler,
-						output_frame.data,
-						output_frame.linesize,
-						frame->data, frame->linesize);
-					video_output_unlock_frame(
-						context->video_output);
-				}
 				context->video_save_position++;
 				if (context->video_save_position >=
 				    context->saving_replay.video_frame_count) {

@@ -8,6 +8,7 @@ on:
 
 env:
   PLUGIN_NAME: replay-source
+  OBS_VERSION: 26.0.2
 
 jobs:
   macos64:
@@ -18,12 +19,13 @@ jobs:
       MACOS_DEPS_VERSION: '2020-08-30'
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           repository: obsproject/obs-studio
+          ref: ${{ env.OBS_VERSION }}
           submodules: 'recursive'
       - name: "Checkout plugin"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           path: plugins/${{ env.PLUGIN_NAME }}
       - name: Fetch Git Tags
@@ -37,7 +39,7 @@ jobs:
           brew bundle --file ./CI/scripts/macos/Brewfile
       - name: 'Restore pre-built dependencies from cache'
         id: deps-cache
-        uses: actions/cache@v1
+        uses: actions/cache@v2.1.2
         env:
           CACHE_NAME: 'deps-cache'
         with:
@@ -45,7 +47,7 @@ jobs:
           key: ${{ runner.os }}-pr-${{ env.CACHE_NAME }}-${{ env.MACOS_DEPS_VERSION }}
       - name: 'Restore pre-built Qt dependency from cache'
         id: deps-qt-cache
-        uses: actions/cache@v1
+        uses: actions/cache@v2.1.2
         env:
           CACHE_NAME: 'deps-qt-cache'
         with:
@@ -92,14 +94,14 @@ jobs:
           cd plugins/${{ env.PLUGIN_NAME }}
           FILE_DATE=$(date +%Y-%m-%d)
           FILE_NAME=${{ env.PLUGIN_NAME }}-$FILE_DATE-${{ github.sha }}-macos.pkg
-          echo "::set-env name=FILE_NAME::${FILE_NAME}"
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
           packagesbuild ./CI/macos/${{ env.PLUGIN_NAME }}.pkgproj
           cd -
           mkdir ./nightly
           mv plugins/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.pkg ./nightly/${FILE_NAME}
       - name: Publish
         if: success()
-        uses: actions/upload-artifact@v2-preview
+        uses: actions/upload-artifact@v2.2.0
         with:
           name: '${{ env.FILE_NAME }}'
           path: ./nightly/*.pkg
@@ -108,12 +110,13 @@ jobs:
     runs-on: [ubuntu-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           repository: obsproject/obs-studio
+          ref: ${{ env.OBS_VERSION }}
           submodules: 'recursive'
       - name: "Checkout plugin"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           path: plugins/${{ env.PLUGIN_NAME }}
       - name: Add plugin to obs cmake
@@ -181,13 +184,13 @@ jobs:
         run: |
           FILE_DATE=$(date +%Y-%m-%d)
           FILE_NAME=${{ env.PLUGIN_NAME }}-$FILE_DATE-${{ github.sha }}-linux64.tar.gz
-          echo "::set-env name=FILE_NAME::${FILE_NAME}"
+          echo "FILE_NAME=${FILE_NAME}" >> $GITHUB_ENV
           mkdir -p ./${{ env.PLUGIN_NAME }}/bin/64bit/
           mv ./build/plugins/${{ env.PLUGIN_NAME }}/${{ env.PLUGIN_NAME }}.so ./${{ env.PLUGIN_NAME }}/bin/64bit/${{ env.PLUGIN_NAME }}.so
           mv ./plugins/${{ env.PLUGIN_NAME }}/data ./${{ env.PLUGIN_NAME }}/data
           tar -cvzf "${FILE_NAME}" ${{ env.PLUGIN_NAME }}
       - name: 'Publish'
-        uses: actions/upload-artifact@v2-preview
+        uses: actions/upload-artifact@v2.2.0
         with:
           name: '${{ env.FILE_NAME }}'
           path: '*.tar.gz'
@@ -201,14 +204,15 @@ jobs:
       WINDOWS_DEPS_VERSION: '2017'
     steps:
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.0
+        uses: microsoft/setup-msbuild@v1.0.2
       - name: Checkout obs
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           repository: obsproject/obs-studio
+          ref: ${{ env.OBS_VERSION }}
           submodules: 'recursive'
       - name: Checkout plugin
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.3
         with:
           path: plugins/${{ env.PLUGIN_NAME}}
       - name: Add plugin to obs cmake
@@ -218,7 +222,7 @@ jobs:
         run: git fetch --prune --tags --unshallow
       - name: 'Restore QT dependency from cache'
         id: qt-cache
-        uses: actions/cache@v1
+        uses: actions/cache@v2.1.2
         env:
           CACHE_NAME: 'qt-cache'
         with:
@@ -226,7 +230,7 @@ jobs:
           key: ${{ runner.os }}-pr-${{ env.CACHE_NAME }}-${{ env.QT_VERSION }}
       - name: 'Restore pre-built dependencies from cache'
         id: deps-cache
-        uses: actions/cache@v1
+        uses: actions/cache@v2.1.2
         env:
           CACHE_NAME: 'deps-cache'
         with:
@@ -261,11 +265,17 @@ jobs:
         run: |
           $env:FILE_DATE=(Get-Date -UFormat "%F")
           $env:FILE_NAME="${{ env.PLUGIN_NAME }}-${env:FILE_DATE}-${{ github.sha }}-windows"
-          echo "::set-env name=FILE_NAME::${env:FILE_NAME}"
+          echo "FILE_NAME=${env:FILE_NAME}" >> ${env:GITHUB_ENV}
           robocopy .\build32\rundir\RelWithDebInfo\obs-plugins\32bit\ .\package\obs-plugins\32bit ${{ env.PLUGIN_NAME }}.* /E /XF .gitignore
           robocopy .\build64\rundir\RelWithDebInfo\obs-plugins\64bit\ .\package\obs-plugins\64bit ${{ env.PLUGIN_NAME }}.* /E /XF .gitignore
           robocopy .\build64\rundir\RelWithDebInfo\data\obs-plugins\${{ env.PLUGIN_NAME }}\ .\package\data\obs-plugins\${{ env.PLUGIN_NAME }}\ /E /XF .gitignore
           exit 0
+      - name: Publish zip
+        if: success()
+        uses: actions/upload-artifact@v2.2.0
+        with:
+          name: '${{ env.FILE_NAME }}'
+          path: package/*
       - name: "Package Installer (Prereqs)"
         run: |
           curl "-kL" "https://github.com/Xaymar/msvc-redist-helper/releases/download/0.1/msvc-redist-helper-64.exe" "-f" "--retry" "5" "-o" "msvc-redist-helper.exe"
@@ -274,9 +284,9 @@ jobs:
       - name: "Package Installer (Compile)"
         run: |
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /Qp ".\build64\plugins\${{ env.PLUGIN_NAME }}\installer.iss"
-      - name: Publish
+      - name: Publish installer
         if: success()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v2.2.0
         with:
-          name: '${{ env.FILE_NAME }}'
-          path: package/*
+          name: '${{ env.FILE_NAME }}-installer'
+          path: package/*.exe
