@@ -1220,6 +1220,9 @@ static void replay_retrieve(struct replay_source *context)
 	} else {
 		new_replay.audio_frames = NULL;
 		new_replay.audio_frame_count = 0;
+		new_replay.oai.speakers = SPEAKERS_STEREO;
+		new_replay.oai.samples_per_sec = 48000;
+		new_replay.oai.format = AUDIO_FORMAT_FLOAT_PLANAR;
 	}
 	if (s)
 		obs_source_release(s);
