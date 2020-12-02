@@ -1,4 +1,5 @@
 #include "replay.h"
+#include "version.h"
 #include <math.h>
 
 void free_audio_data(struct replay_filter *filter)
@@ -115,6 +116,7 @@ extern void RegisterDShowReplaySource();
 
 bool obs_module_load(void)
 {
+	blog(LOG_INFO, "[Replay Source] loaded version %s", PROJECT_VERSION);
 	obs_register_source(&replay_source_info);
 	obs_register_source(&replay_filter_info);
 	obs_register_source(&replay_filter_audio_info);

@@ -1,5 +1,7 @@
-project(replay-source VERSION 1.6.6)
+project(replay-source VERSION 1.6.7)
 set(PROJECT_FULL_NAME "Replay Source")
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
 
 if(MSVC)
 	set(replay-source_PLATFORM_DEPS
@@ -7,7 +9,8 @@ if(MSVC)
 endif()
 
 set(replay-source_HEADERS
-	replay.h)
+	replay.h
+	version.h)
 set(replay-source_SOURCES
 	replay.c
 	replay-source.c
