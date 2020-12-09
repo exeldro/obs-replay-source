@@ -1841,6 +1841,13 @@ static void replay_trim_reset_hotkey(void *data, obs_hotkey_id id,
 	}
 }
 
+static void *replay_thread(void *data)
+{
+	struct replay_source *context = data;
+	replay_hotkey(context, 0, NULL, true);
+	return NULL;
+}
+
 static void replay_source_update(void *data, obs_data_t *settings)
 {
 	struct replay_source *context = data;
@@ -1848,7 +1855,8 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		obs_data_get_string(settings, SETTING_EXECUTE_ACTION);
 	if (execute_action && strlen(execute_action)) {
 		if (strcmp(execute_action, "Load") == 0) {
-			replay_hotkey(context, 0, NULL, true);
+			pthread_t thread;
+			pthread_create(&thread, NULL, replay_thread, context);
 		} else if (strcmp(execute_action, "Next") == 0) {
 			replay_next_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "Previous") == 0) {
