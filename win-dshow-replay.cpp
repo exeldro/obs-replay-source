@@ -1312,28 +1312,6 @@ static void proc_activate(void *data, calldata_t *cd)
 	input->SetActive(activate);
 }
 
-static void *CreateDShowReplayInput(obs_data_t *settings, obs_source_t *source)
-{
-	DShowReplayInput *dshow = nullptr;
-
-	try {
-		dshow = new DShowReplayInput(source, settings);
-		proc_handler_t *ph = obs_source_get_proc_handler(source);
-		proc_handler_add(ph, "void activate(bool active)",
-				 proc_activate, dshow);
-	} catch (const char *error) {
-		blog(LOG_ERROR, "Could not create device '%s': %s",
-		     obs_source_get_name(source), error);
-	}
-
-	return dshow;
-}
-
-static void DestroyDShowReplayInput(void *data)
-{
-	delete reinterpret_cast<DShowReplayInput *>(data);
-}
-
 static void UpdateDShowReplayInput(void *data, obs_data_t *settings)
 {
 	DShowReplayInput *input = reinterpret_cast<DShowReplayInput *>(data);
@@ -1353,6 +1331,28 @@ static void UpdateDShowReplayInput(void *data, obs_data_t *settings)
 	const double db =
 		obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
 	input->replay_filter.threshold = db_to_mul(db);
+}
+
+static void *CreateDShowReplayInput(obs_data_t *settings, obs_source_t *source)
+{
+	DShowReplayInput *dshow = nullptr;
+
+	try {
+		dshow = new DShowReplayInput(source, settings);
+		proc_handler_t *ph = obs_source_get_proc_handler(source);
+		proc_handler_add(ph, "void activate(bool active)",
+				 proc_activate, dshow);
+	} catch (const char *error) {
+		blog(LOG_ERROR, "Could not create device '%s': %s",
+		     obs_source_get_name(source), error);
+	}
+	UpdateDShowReplayInput(dshow, settings);
+	return dshow;
+}
+
+static void DestroyDShowReplayInput(void *data)
+{
+	delete reinterpret_cast<DShowReplayInput *>(data);
 }
 
 static void GetDShowReplayDefaults(obs_data_t *settings)
@@ -2214,6 +2214,7 @@ void RegisterDShowReplaySource()
 	info.create = CreateDShowReplayInput;
 	info.destroy = DestroyDShowReplayInput;
 	info.update = UpdateDShowReplayInput;
+	info.load = UpdateDShowReplayInput;
 	info.get_defaults = GetDShowReplayDefaults;
 	info.get_properties = GetDShowReplayProperties;
 	info.icon_type = OBS_ICON_TYPE_CAMERA;

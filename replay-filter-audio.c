@@ -91,6 +91,7 @@ struct obs_source_info replay_filter_audio_info = {
 	.create = replay_filter_create,
 	.destroy = replay_filter_destroy,
 	.update = replay_filter_update,
+	.load = replay_filter_update,
 	.get_name = replay_filter_get_name,
 	.get_properties = replay_filter_properties,
 	.filter_remove = replay_filter_remove,

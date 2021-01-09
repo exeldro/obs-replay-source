@@ -1,4 +1,4 @@
-project(replay-source VERSION 1.6.7)
+project(replay-source VERSION 1.6.8)
 set(PROJECT_FULL_NAME "Replay Source")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)

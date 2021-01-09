@@ -308,32 +308,32 @@ static bool EnumScenesItems(void *data, obs_source_t *source)
 static void replay_update_progress_crop(struct replay_source *context,
 					uint64_t t)
 {
-	if (context->progress_source_name) {
-		obs_source_t *s =
-			obs_get_source_by_name(context->progress_source_name);
-		if (s) {
-			const uint32_t width = obs_source_get_base_width(s);
-			if (width) {
-				struct siu siu;
-				siu.source = s;
-				if (t &&
-				    context->current_replay
-					    .last_frame_timestamp &&
-				    context->current_replay.duration) {
-					siu.crop_width =
-						(context->current_replay
-							 .last_frame_timestamp -
-						 t) *
-						width /
-						context->current_replay.duration;
-				} else {
-					siu.crop_width = width;
-				}
-				obs_enum_scenes(EnumScenesItems, &siu);
-			}
-			obs_source_release(s);
+	if (!context->progress_source_name)
+		return;
+	obs_source_t *s =
+		obs_get_source_by_name(context->progress_source_name);
+	if (!s)
+		return;
+	const uint32_t width = obs_source_get_base_width(s);
+	if (width) {
+		struct siu siu;
+		siu.source = s;
+		if (t &&
+		    context->current_replay
+		           .last_frame_timestamp &&
+		    context->current_replay.duration) {
+			siu.crop_width =
+				(context->current_replay
+				        .last_frame_timestamp -
+				 t) *
+				width /
+				context->current_replay.duration;
+		} else {
+			siu.crop_width = width;
 		}
+		obs_enum_scenes(EnumScenesItems, &siu);
 	}
+	obs_source_release(s);
 }
 
 static const char *replay_source_get_name(void *unused)
@@ -1841,6 +1841,37 @@ static void replay_trim_reset_hotkey(void *data, obs_hotkey_id id,
 	}
 }
 
+void update_filter_settings(obs_source_t *filter, obs_data_t *settings)
+{
+	obs_data_t * filter_settings = obs_source_get_settings(filter);
+	if (!filter_settings)
+		return;
+	bool changed = false;
+	if (obs_data_get_int(filter_settings, SETTING_DURATION) !=
+	    obs_data_get_int(settings, SETTING_DURATION)) {
+		obs_data_set_int(filter_settings, SETTING_DURATION,
+				 obs_data_get_int(settings, SETTING_DURATION));
+		changed = true;
+	}
+	if (obs_data_get_bool(filter_settings, SETTING_SOUND_TRIGGER) !=
+	    obs_data_get_bool(settings, SETTING_SOUND_TRIGGER)) {
+		obs_data_set_bool(filter_settings, SETTING_SOUND_TRIGGER,
+				  obs_data_get_bool(settings,
+						    SETTING_SOUND_TRIGGER));
+		changed = true;
+	}
+	if (obs_data_get_double(filter_settings, SETTING_AUDIO_THRESHOLD) !=
+	    obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD)) {
+		obs_data_set_double(filter_settings, SETTING_AUDIO_THRESHOLD,
+			obs_data_get_double(settings,
+						  SETTING_AUDIO_THRESHOLD));
+		changed = true;
+	}
+	obs_data_release(filter_settings);
+	if (changed)
+		obs_source_update(filter, NULL);
+}
+
 static void replay_source_update(void *data, obs_data_t *settings)
 {
 	struct replay_source *context = data;
@@ -2032,7 +2063,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			if (strcmp(obs_source_get_unversioned_id(s),
 				   "dshow_input_replay") == 0) {
 				if (obs_obj_get_data(s)) {
-					obs_source_update(s, settings);
+					update_filter_settings(s, settings);
 					((struct replay_filter *)
 						 obs_obj_get_data(s))
 						->threshold_data = data;
@@ -2077,7 +2108,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					}
 				} else if (obs_obj_get_data(
 						   context->source_filter)) {
-					obs_source_update(
+					update_filter_settings(
 						context->source_filter,
 						settings);
 					info("updated filter for '%s'",
@@ -2111,7 +2142,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			if (strcmp(obs_source_get_unversioned_id(s),
 				   "dshow_input_replay") == 0) {
 				if (obs_obj_get_data(s)) {
-					obs_source_update(s, settings);
+					update_filter_settings(s, settings);
 					((struct replay_filter *)
 						 obs_obj_get_data(s))
 						->threshold_data = data;
@@ -2148,7 +2179,7 @@ static void replay_source_update(void *data, obs_data_t *settings)
 					}
 				} else if (obs_obj_get_data(
 						   context->source_audio_filter)) {
-					obs_source_update(
+					update_filter_settings(
 						context->source_audio_filter,
 						settings);
 					info("updated audio filter for '%s'",
@@ -3286,6 +3317,7 @@ static bool replay_video_source_modified(obs_properties_t *props,
 				 OBS_SOURCE_ASYNC) {
 			async_source = true;
 		}
+		obs_source_release(s);
 	}
 	obs_property_t *prop =
 		obs_properties_get(props, SETTING_INTERNAL_FRAMES);
@@ -3305,6 +3337,7 @@ static bool replay_text_source_modified(obs_properties_t *props,
 		if (s) {
 			text_source = true;
 		}
+		obs_source_release(s);
 	}
 	obs_property_t *prop = obs_properties_get(props, SETTING_TEXT);
 	obs_property_set_visible(prop, text_source);

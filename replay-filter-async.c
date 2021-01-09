@@ -205,6 +205,7 @@ struct obs_source_info replay_filter_async_info = {
 	.create = replay_filter_create,
 	.destroy = replay_filter_destroy,
 	.update = replay_filter_update,
+	.load = replay_filter_update,
 	.get_name = replay_filter_get_name,
 	.get_properties = replay_filter_properties,
 	.filter_video = replay_filter_video,
