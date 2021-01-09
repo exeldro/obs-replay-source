@@ -1070,6 +1070,21 @@ void replay_save(struct replay_source *context)
 	context->start_save_timestamp = obs_get_video_frame_time();
 
 	struct obs_source_frame *frame = context->saving_replay.video_frames[0];
+	if (context->saving_replay.trim_front) {
+		while (frame->timestamp <
+		       context->saving_replay.first_frame_timestamp +
+			       context->saving_replay.trim_front) {
+			context->video_save_position++;
+			if (context->video_save_position >=
+			    context->saving_replay.video_frame_count) {
+				context->saving_status = SAVING_STATUS_STOPPING;
+				pthread_mutex_unlock(&context->video_mutex);
+				return;
+			}
+			frame = context->saving_replay.video_frames
+					[context->video_save_position];
+		}
+	}
 	struct video_frame output_frame;
 	if (video_output_lock_frame(context->video_output, &output_frame, 1,
 				    context->start_save_timestamp)) {
@@ -2698,6 +2713,7 @@ static void replay_source_tick(void *data, float seconds)
 					     context->saving_replay
 						     .first_frame_timestamp;
 			}
+			timestamp -= context->saving_replay.trim_front;
 
 			struct video_frame output_frame;
 			if (video_output_lock_frame(context->video_output,
