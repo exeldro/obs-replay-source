@@ -232,7 +232,7 @@ static void replay_update_text(struct replay_source *c)
 			pos += buffer.len;
 		} else if (astrcmp_n(cmp, "%TIME%", 6) == 0) {
 			if (c->replays.size && c->start_timestamp) {
-				uint64_t time = 0;
+				int64_t time = 0;
 				if (c->pause_timestamp > c->start_timestamp) {
 					time = c->pause_timestamp -
 					       c->start_timestamp;
@@ -2487,7 +2487,6 @@ static void replay_output_frame(struct replay_source *context,
 		obs_source_output_video(context->source, frame);
 	}
 	frame->timestamp = t;
-	replay_update_text(context);
 	replay_update_progress_crop(context, t);
 }
 
@@ -2788,6 +2787,7 @@ static void replay_source_tick(void *data, float seconds)
 		context->end = false;
 		obs_source_media_started(context->source);
 	}
+	replay_update_text(context);
 
 	if (context->current_replay.video_frame_count) {
 		if (context->video_frame_position >=
