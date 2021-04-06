@@ -3281,7 +3281,7 @@ static void replay_source_tick(void *data, float seconds)
 static bool EnumVideoSources(void *data, obs_source_t *source)
 {
 	obs_property_t *prop = data;
-	if ((source->info.output_flags & OBS_SOURCE_VIDEO) != 0)
+	if ((obs_source_get_output_flags(source) & OBS_SOURCE_VIDEO) != 0)
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
@@ -3289,7 +3289,7 @@ static bool EnumVideoSources(void *data, obs_source_t *source)
 static bool EnumAudioSources(void *data, obs_source_t *source)
 {
 	obs_property_t *prop = data;
-	if ((source->info.output_flags & OBS_SOURCE_AUDIO) != 0)
+	if ((obs_source_get_output_flags(source) & OBS_SOURCE_AUDIO) != 0)
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
@@ -3297,7 +3297,7 @@ static bool EnumAudioSources(void *data, obs_source_t *source)
 static bool EnumScenes(void *data, obs_source_t *source)
 {
 	obs_property_t *prop = data;
-	if (source->info.type == OBS_SOURCE_TYPE_SCENE)
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)
 		obs_property_list_add_string(prop, obs_source_get_name(source),
 					     obs_source_get_name(source));
 	return true;
