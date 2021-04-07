@@ -15,8 +15,8 @@ jobs:
     name: "macOS 64-bit"
     runs-on: [macos-latest]
     env:
-      QT_VERSION: 5.14.1
-      MACOS_DEPS_VERSION: '2020-08-30'
+      QT_VERSION: '5.15.2'
+      MACOS_DEPS_VERSION: '2020-12-22'
     steps:
       - name: Checkout
         uses: actions/checkout@v2.3.3
@@ -77,8 +77,9 @@ jobs:
         if: success()
         shell: bash
         run: |
-          curl -L -O https://s3-us-west-2.amazonaws.com/obs-nightly/Packages.pkg
-          sudo installer -pkg ./Packages.pkg -target /
+          curl -L -O http://s.sudre.free.fr/Software/files/Packages.dmg
+          sudo hdiutil attach ./Packages.dmg
+          sudo installer -pkg /Volumes/Packages\ 1.2.9/Install\ Packages.pkg -target /
       - name: Package
         if: success()
         shell: bash
@@ -150,9 +151,11 @@ jobs:
            libva-dev \
            libvlc-dev \
            libx11-dev \
+           libx11-xcb-dev \
            libx264-dev \
            libxcb-randr0-dev \
            libxcb-shm0-dev \
+           libxcb-xfixes0-dev \
            libxcb-xinerama0-dev \
            libxcomposite-dev \
            libxinerama-dev \
@@ -161,7 +164,8 @@ jobs:
            python3-dev \
            qtbase5-dev \
            libqt5svg5-dev \
-           swig
+           swig \
+           linux-generic
       - name: 'Configure'
         shell: bash
         run: |
@@ -191,10 +195,10 @@ jobs:
     name: Windows
     runs-on: [windows-latest]
     env:
-      QT_VERSION: 5.10.1
+      QT_VERSION: '5.15.2'
       CMAKE_GENERATOR: "Visual Studio 16 2019"
       CMAKE_SYSTEM_VERSION: "10.0.18363.657"
-      WINDOWS_DEPS_VERSION: '2017'
+      WINDOWS_DEPS_VERSION: '2019'
     steps:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.0.2
@@ -244,15 +248,15 @@ jobs:
           mkdir ./package
           mkdir ./build32
           cd ./build32
-          cmake -G"${{ env.CMAKE_GENERATOR }}" -A"Win32" -DCMAKE_SYSTEM_VERSION="${{ env.CMAKE_SYSTEM_VERSION }}" -DBUILD_BROWSER=false -DBUILD_CAPTIONS=false -DCOMPILE_D3D12_HOOK=false -DDepsPath="${{ github.workspace }}/cmbuild/deps/win32" -DQTDIR="${{ github.workspace }}/cmbuild/QT/${{ env.QT_VERSION }}/msvc2017" -DCOPIED_DEPENDENCIES=FALSE -DCOPY_DEPENDENCIES=TRUE ..
+          cmake -G"${{ env.CMAKE_GENERATOR }}" -A"Win32" -DCMAKE_SYSTEM_VERSION="${{ env.CMAKE_SYSTEM_VERSION }}" -DBUILD_BROWSER=false -DBUILD_CAPTIONS=false -DCOMPILE_D3D12_HOOK=false -DDepsPath="${{ github.workspace }}/cmbuild/deps/win32" -DQTDIR="${{ github.workspace }}/cmbuild/QT/${{ env.QT_VERSION }}/msvc2019" -DCOPIED_DEPENDENCIES=FALSE -DCOPY_DEPENDENCIES=TRUE ..
           cd ..
           mkdir ./build64
           cd ./build64
-          cmake -G"${{ env.CMAKE_GENERATOR }}" -A"x64" -DCMAKE_SYSTEM_VERSION="${{ env.CMAKE_SYSTEM_VERSION }}" -DBUILD_BROWSER=false -DBUILD_CAPTIONS=false -DCOMPILE_D3D12_HOOK=false -DDepsPath="${{ github.workspace }}/cmbuild/deps/win64" -DQTDIR="${{ github.workspace }}/cmbuild/QT/${{ env.QT_VERSION }}/msvc2017_64" -DCOPIED_DEPENDENCIES=FALSE -DCOPY_DEPENDENCIES=TRUE ..
-      - name: Build
-        run: |
-          msbuild /m /p:Configuration=RelWithDebInfo .\build32\obs-studio.sln
-          msbuild /m /p:Configuration=RelWithDebInfo .\build64\obs-studio.sln
+          cmake -G"${{ env.CMAKE_GENERATOR }}" -A"x64" -DCMAKE_SYSTEM_VERSION="${{ env.CMAKE_SYSTEM_VERSION }}" -DBUILD_BROWSER=false -DBUILD_CAPTIONS=false -DCOMPILE_D3D12_HOOK=false -DDepsPath="${{ github.workspace }}/cmbuild/deps/win64" -DQTDIR="${{ github.workspace }}/cmbuild/QT/${{ env.QT_VERSION }}/msvc2019_64" -DCOPIED_DEPENDENCIES=FALSE -DCOPY_DEPENDENCIES=TRUE ..
+      - name: 'Build 32'
+        run: msbuild /m /p:Configuration=RelWithDebInfo .\build32\obs-studio.sln
+      - name: 'Build 64'
+        run: msbuild /m /p:Configuration=RelWithDebInfo .\build64\obs-studio.sln
       - name: Package
         if: success()
         run: |
