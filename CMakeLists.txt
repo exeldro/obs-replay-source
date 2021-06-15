@@ -1,4 +1,4 @@
-project(replay-source VERSION 1.6.8)
+project(replay-source VERSION 1.6.9)
 set(PROJECT_FULL_NAME "Replay Source")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
@@ -18,6 +18,7 @@ set(replay-source_SOURCES
 	replay-filter-audio.c
 	replay-filter-async.c)
 
+include_directories(${CMAKE_SOURCE_DIR}/deps/libcaption)
 if(WIN32)
 	get_filename_component(ISS_FILES_DIR "${CMAKE_BINARY_DIR}\\..\\package" ABSOLUTE)
 	file(TO_NATIVE_PATH "${ISS_FILES_DIR}" ISS_FILES_DIR)
