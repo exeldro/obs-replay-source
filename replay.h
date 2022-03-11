@@ -41,7 +41,7 @@ struct obs_audio_data *replay_filter_audio(void *data,
 void free_video_data(struct replay_filter *filter);
 void free_audio_data(struct replay_filter *filter);
 void replay_trigger_threshold(void *data);
-void replay_filter_check(struct replay_filter *filter);
+void replay_filter_check(void *data);
 
 #define REPLAY_FILTER_ID "replay_filter"
 #define REPLAY_FILTER_AUDIO_ID "replay_filter_audio"

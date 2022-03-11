@@ -84,6 +84,10 @@ static obs_properties_t *replay_filter_properties(void *unused)
 	return props;
 }
 
+static void replay_filter_tick(void *data, float seconds){
+	replay_filter_check(data);
+}
+
 struct obs_source_info replay_filter_audio_info = {
 	.id = REPLAY_FILTER_AUDIO_ID,
 	.type = OBS_SOURCE_TYPE_FILTER,
@@ -92,6 +96,7 @@ struct obs_source_info replay_filter_audio_info = {
 	.destroy = replay_filter_destroy,
 	.update = replay_filter_update,
 	.load = replay_filter_update,
+	.video_tick = replay_filter_tick,
 	.get_name = replay_filter_get_name,
 	.get_properties = replay_filter_properties,
 	.filter_remove = replay_filter_remove,

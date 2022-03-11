@@ -98,7 +98,6 @@ struct obs_audio_data *replay_filter_audio(void *data,
 		cur_duration = adjusted_time - cached.timestamp;
 	}
 	pthread_mutex_unlock(&filter->mutex);
-	replay_filter_check(filter);
 	return audio;
 }
 
@@ -149,10 +148,11 @@ const char *obs_module_author(void)
 	return "Exeldro";
 }
 
-void replay_filter_check(struct replay_filter *filter)
+void replay_filter_check(void *data)
 {
+	struct replay_filter *filter = data;
 	if (filter->last_check &&
-	    filter->last_check + SEC_TO_NSEC > obs_get_video_frame_time())
+	    filter->last_check + 3 * SEC_TO_NSEC > obs_get_video_frame_time())
 		return;
 	filter->last_check = obs_get_video_frame_time();
 	obs_source_t *s =
