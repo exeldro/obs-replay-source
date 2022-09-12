@@ -80,6 +80,8 @@ void replay_filter_raw_video(void *data, struct video_data *frame)
 
 void replay_filter_offscreen_render(void *data, uint32_t cx, uint32_t cy)
 {
+	UNUSED_PARAMETER(cx);
+	UNUSED_PARAMETER(cy);
 	struct replay_filter *filter = data;
 
 	obs_source_t *target = obs_filter_get_target(filter->src);
@@ -257,6 +259,7 @@ static obs_properties_t *replay_filter_properties(void *unused)
 
 static void replay_filter_remove(void *data, obs_source_t *parent)
 {
+	UNUSED_PARAMETER(parent);
 	struct replay_filter *filter = data;
 
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
@@ -268,6 +271,7 @@ static void replay_filter_remove(void *data, obs_source_t *parent)
 
 void replay_filter_tick(void *data, float seconds)
 {
+	UNUSED_PARAMETER(seconds);
 	struct replay_filter *filter = data;
 	obs_get_video_info(&filter->ovi);
 	replay_filter_check(filter);
