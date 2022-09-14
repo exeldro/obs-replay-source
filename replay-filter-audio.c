@@ -60,6 +60,7 @@ static void replay_filter_destroy(void *data)
 
 static void replay_filter_remove(void *data, obs_source_t *parent)
 {
+	UNUSED_PARAMETER(parent);
 	struct replay_filter *filter = data;
 
 	free_video_data(filter);
@@ -85,6 +86,7 @@ static obs_properties_t *replay_filter_properties(void *unused)
 }
 
 static void replay_filter_tick(void *data, float seconds){
+	UNUSED_PARAMETER(seconds);
 	replay_filter_check(data);
 }
 

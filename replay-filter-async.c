@@ -2,7 +2,7 @@
 #include <util/circlebuf.h>
 #include <util/threading.h>
 #include "replay.h"
-#include "obs-internal.h"
+#include <obs-internal.h>
 #include "media-io/audio-math.h"
 
 static const char *replay_filter_get_name(void *unused)
@@ -60,6 +60,7 @@ static void replay_filter_destroy(void *data)
 
 static void replay_filter_remove(void *data, obs_source_t *parent)
 {
+	UNUSED_PARAMETER(parent);
 	struct replay_filter *filter = data;
 	pthread_mutex_lock(&filter->mutex);
 	free_video_data(filter);
@@ -198,6 +199,7 @@ static obs_properties_t *replay_filter_properties(void *unused)
 }
 
 static void replay_filter_tick(void *data, float seconds){
+	UNUSED_PARAMETER(seconds);
 	replay_filter_check(data);
 }
 
