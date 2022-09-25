@@ -1568,7 +1568,7 @@ static void replay_remove_hotkey(void *data, obs_hotkey_id id,
 
 	if (context->replay_position >= replay_count)
 		return;
-replay_position
+
 	pthread_mutex_lock(&context->replay_mutex);
 	struct replay removed_replay;
 	for (int i = 0; i < replay_count; i++) {
