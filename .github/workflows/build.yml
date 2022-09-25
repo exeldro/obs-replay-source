@@ -293,12 +293,6 @@ jobs:
         with:
           name: 'installer-files'
           path: .
-      - name: Create Code Signing Certificate
-        if: success() && github.event_name != 'pull_request'
-        run: |
-          New-Item -ItemType directory -Path certificate
-          Set-Content -Path certificate\certificate.txt -Value '${{ secrets.CERTIFICATE }}'
-          certutil -decode certificate\certificate.txt certificate\certificate.pfx
       - name: Publish zip
         if: success()
         uses: actions/upload-artifact@v2.2.0
