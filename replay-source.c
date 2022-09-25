@@ -700,6 +700,7 @@ static void replay_source_defaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, SETTING_FILE_FORMAT,
 				    "%CCYY-%MM-%DD %hh.%mm.%ss");
 	obs_data_set_default_bool(settings, SETTING_LOSSLESS, false);
+	obs_data_set_default_bool(settings, SETTING_START_DELAY_ONLY_FIRST, false);
 }
 
 static void replay_source_show(void *data)
@@ -2088,6 +2089,8 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		(int)obs_data_get_int(settings, SETTING_END_ACTION);
 	context->start_delay =
 		obs_data_get_int(settings, SETTING_START_DELAY) * 1000000;
+	context->start_delay_only_first = 
+		obs_data_get_bool(settings, SETTING_START_DELAY_ONLY_FIRST);
 	context->retrieve_delay =
 		obs_data_get_int(settings, SETTING_RETRIEVE_DELAY) * 1000000;
 
@@ -3516,7 +3519,7 @@ static obs_properties_t *replay_source_properties(void *data)
 				      obs_module_text("StartDelay"), -100000,
 				      100000, 1000);
 	obs_property_int_set_suffix(prop, "ms");
-	obs_properties_add_bool(props, SETTING_START_DELAY_ONLY_FIRST, "StartDelayOnlyOnFirstReplay");
+	obs_properties_add_bool(props, SETTING_START_DELAY_ONLY_FIRST, obs_module_text("StartDelayOnlyOnFirstReplay"));
 
 	prop = obs_properties_add_list(props, SETTING_END_ACTION,
 				       obs_module_text("EndAction"),
