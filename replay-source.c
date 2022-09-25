@@ -1265,11 +1265,7 @@ static void replay_retrieve(struct replay_source *context)
 	new_replay.duration = new_replay.last_frame_timestamp -
 			      new_replay.first_frame_timestamp;
 
-	blog(LOG_INFO,
-	     "[replay_source: '%s'] Showing replay %i/%i",
-	     obs_source_get_name(context->source), context->replay_position + 1,
-	     (int)(context->replays.size / sizeof context->current_replay));
-	if (!((context->start_delay_only_first) && (context->replay_position != 0))) {
+	if (!((context->start_delay_only_first) && ((int)(context->replays.size / sizeof context->current_replay) != 0))) {
 		if (context->start_delay > 0) {
 			if (context->backward_start) {
 				if (context->speed_percent == 100.0f) {
