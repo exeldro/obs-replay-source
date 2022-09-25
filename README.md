@@ -1,6 +1,6 @@
 # Replay Source for OBS Studio
 
-Plugin for OBS Studio to (slow motion) replay async sources from memory.
+Plugin for OBS Studio to (slow motion) replay async sources from memory, with extra button for start delay to only affect first replay in queue.
 
 Download from
 https://obsproject.com/forum/resources/replay-source.686/
