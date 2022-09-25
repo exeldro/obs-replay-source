@@ -63,6 +63,7 @@ void replay_filter_check(void *data);
 #define SETTING_BACKWARD "backward"
 #define SETTING_VISIBILITY_ACTION "visibility_action"
 #define SETTING_START_DELAY "start_delay"
+#define SETTING_START_DELAY_ONLY_FIRST "start_delay_only_first"
 //#define TEXT_START_DELAY "Start delay (ms)"
 #define SETTING_END_ACTION "end_action"
 #define SETTING_SOURCE "source"

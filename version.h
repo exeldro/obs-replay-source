@@ -1,0 +1,6 @@
+#pragma once
+
+#define PROJECT_VERSION "1.6.11"
+#define PROJECT_VERSION_MAJOR 1
+#define PROJECT_VERSION_MINOR 6
+#define PROJECT_VERSION_PATCH 11

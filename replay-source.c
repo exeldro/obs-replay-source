@@ -95,6 +95,7 @@ struct replay_source {
 	uint64_t previous_frame_timestamp;
 	uint64_t pause_timestamp;
 	int64_t start_delay;
+	bool start_delay_only_first;
 	int64_t retrieve_delay;
 	uint64_t retrieve_timestamp;
 	uint64_t threshold_timestamp;
@@ -1264,28 +1265,31 @@ static void replay_retrieve(struct replay_source *context)
 			      new_replay.first_frame_timestamp;
 
 	if (context->start_delay > 0) {
-		if (context->backward_start) {
-			if (context->speed_percent == 100.0f) {
-				new_replay.trim_end = context->start_delay * -1;
+		if (!(context->start_delay_only_first && context->replay_position != 0)) {
+			if (context->backward_start) {
+				if (context->speed_percent == 100.0f) {
+					new_replay.trim_end = context->start_delay * -1;
+				} else {
+					new_replay.trim_end =
+						(int64_t)(context->start_delay *
+							  context->speed_percent /
+							  -100.0);
+				}
+				new_replay.trim_front = 0;
 			} else {
-				new_replay.trim_end =
-					(int64_t)(context->start_delay *
-						  context->speed_percent /
-						  -100.0);
+				if (context->speed_percent == 100.0f) {
+					new_replay.trim_front =
+						context->start_delay * -1;
+				} else {
+					new_replay.trim_front =
+						(int64_t)(context->start_delay *
+							  context->speed_percent /
+							  -100.0);
+				}
+				new_replay.trim_end = 0;
 			}
-			new_replay.trim_front = 0;
-		} else {
-			if (context->speed_percent == 100.0f) {
-				new_replay.trim_front =
-					context->start_delay * -1;
-			} else {
-				new_replay.trim_front =
-					(int64_t)(context->start_delay *
-						  context->speed_percent /
-						  -100.0);
-			}
-			new_replay.trim_end = 0;
 		}
+		
 	} else if (context->start_delay < 0 &&
 		   context->start_delay * -1 < (int64_t)new_replay.duration) {
 		new_replay.trim_front = context->start_delay * -1;
@@ -3512,6 +3516,7 @@ static obs_properties_t *replay_source_properties(void *data)
 				      obs_module_text("StartDelay"), -100000,
 				      100000, 1000);
 	obs_property_int_set_suffix(prop, "ms");
+	obs_properties_add_bool(props, SETTING_START_DELAY_ONLY_FIRST, "StartDelayOnlyOnFirstReplay");
 
 	prop = obs_properties_add_list(props, SETTING_END_ACTION,
 				       obs_module_text("EndAction"),
