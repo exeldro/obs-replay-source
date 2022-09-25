@@ -1265,8 +1265,8 @@ static void replay_retrieve(struct replay_source *context)
 	new_replay.duration = new_replay.last_frame_timestamp -
 			      new_replay.first_frame_timestamp;
 
-	if (context->start_delay > 0) {
-		if ((!(context->start_delay_only_first) && (context->replay_position != 0))) {
+	if (!((context->start_delay_only_first) && (context->replay_position != 0))) {
+		if (context->start_delay > 0) {
 			if (context->backward_start) {
 				if (context->speed_percent == 100.0f) {
 					new_replay.trim_end = context->start_delay * -1;
@@ -1289,12 +1289,13 @@ static void replay_retrieve(struct replay_source *context)
 				}
 				new_replay.trim_end = 0;
 			}
-		}
 		
-	} else if (context->start_delay < 0 &&
-		   context->start_delay * -1 < (int64_t)new_replay.duration) {
-		new_replay.trim_front = context->start_delay * -1;
+		} else if (context->start_delay < 0 &&
+			context->start_delay * -1 < (int64_t)new_replay.duration) {
+			new_replay.trim_front = context->start_delay * -1;
+		}
 	}
+	
 
 	pthread_mutex_lock(&context->replay_mutex);
 	circlebuf_push_back(&context->replays, &new_replay, sizeof new_replay);
