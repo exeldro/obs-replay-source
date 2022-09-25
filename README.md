@@ -1,4 +1,4 @@
-# Replay Source for OBS Studio
+# Replay Source for OBS Studio, with Start Delay only on First Replay option
 
 Plugin for OBS Studio to (slow motion) replay async sources from memory.
 
