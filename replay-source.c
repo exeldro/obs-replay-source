@@ -1265,7 +1265,7 @@ static void replay_retrieve(struct replay_source *context)
 			      new_replay.first_frame_timestamp;
 
 	if (context->start_delay > 0) {
-		if (!(context->start_delay_only_first && context->replay_position != 0)) {
+		if ((!(context->start_delay_only_first) && (context->replay_position != 0))) {
 			if (context->backward_start) {
 				if (context->speed_percent == 100.0f) {
 					new_replay.trim_end = context->start_delay * -1;
