@@ -6,7 +6,7 @@ else()
   cmake_minimum_required(VERSION 3.18)
 endif()
 
-project(replay-source VERSION 1.6.11)
+project(replay-source VERSION 1.6.12)
 set(PROJECT_FULL_NAME "Replay Source")
 
 # Set new UUIDs when you start to create a new plugin.
@@ -34,10 +34,14 @@ if(BUILD_OUT_OF_TREE)
   find_package(libcaption)
   target_include_directories(${PROJECT_NAME} PRIVATE
   "${CMAKE_SOURCE_DIR}/../obs-studio/deps/libcaption")
+  target_include_directories(${PROJECT_NAME} PRIVATE
+  "${CMAKE_SOURCE_DIR}/../obs-studio/deps/uthash")
 else()
 	set(OBS_FRONTEND_API_NAME "frontend-api")
 	target_include_directories(${PROJECT_NAME} PRIVATE
         "${CMAKE_SOURCE_DIR}/deps/libcaption")
+	target_include_directories(${PROJECT_NAME} PRIVATE
+		"${CMAKE_SOURCE_DIR}/deps/uthash")
 endif()
 
 if(OS_WINDOWS)
