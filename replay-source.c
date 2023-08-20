@@ -71,6 +71,8 @@ struct replay_source {
 	obs_hotkey_id pause_hotkey;
 	obs_hotkey_id faster_hotkey;
 	obs_hotkey_id slower_hotkey;
+	obs_hotkey_id faster_by_5_hotkey;
+	obs_hotkey_id slower_by_5_hotkey;
 	obs_hotkey_id normal_or_faster_hotkey;
 	obs_hotkey_id normal_or_slower_hotkey;
 	obs_hotkey_id normal_speed_hotkey;
@@ -1678,6 +1680,35 @@ static void replay_slower_hotkey(void *data, obs_hotkey_id id,
 
 	update_speed(c, c->speed_percent * 2.0f / 3.0f);
 }
+static void replay_faster__by_5_hotkey(void *data, obs_hotkey_id id,
+					 obs_hotkey_t *hotkey, bool pressed)
+{
+		UNUSED_PARAMETER(id);
+		UNUSED_PARAMETER(hotkey);
+
+		struct replay_source *c = data;
+
+		if (!pressed)
+			return;
+			
+		update_speed(c, c->speed_percent + 5.0 );
+		
+}
+
+static void replay_slower_by_5_hotkey(void *data, obs_hotkey_id id,
+				 obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if (!pressed)
+		return;
+		
+		update_speed(c, c->speed_percent - 5.0 );
+	
+}
 
 static void replay_normal_or_faster_hotkey(void *data, obs_hotkey_id id,
 					   obs_hotkey_t *hotkey, bool pressed)
@@ -1951,6 +1982,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			replay_faster_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "Slower") == 0) {
 			replay_slower_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Faster by 5") == 0) {
+			replay_faster_by_5_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Slower by 5") == 0) {
+			replay_slower_by_5_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "NormalOrFaster") == 0) {
 			replay_normal_or_faster_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "NormalOrSlower") == 0) {
@@ -2397,6 +2432,14 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 	context->slower_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.Slower", obs_module_text("Slower"),
 		replay_slower_hotkey, context);
+		
+	context->faster_by_5_hotkey = obs_hotkey_register_source(
+		source, "ReplaySource.FasterBy5", obs_module_text("Faster by 5"),
+		replay_faster_by_5_hotkey, context);
+
+	context->slower_by_5_hotkey = obs_hotkey_register_source(
+		source, "ReplaySource.SlowerBy5", obs_module_text("Slower by 5"),
+		replay_slower_by_5_hotkey, context);
 
 	context->normal_or_faster_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.NormalOrFaster",
