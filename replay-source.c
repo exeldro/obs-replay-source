@@ -2344,6 +2344,7 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 	UNUSED_PARAMETER(settings);
 	struct replay_source *context = bzalloc(sizeof(struct replay_source));
 	context->source = source;
+	obs_source_set_async_unbuffered(source, true);
 	pthread_mutex_init(&context->video_mutex, NULL);
 	pthread_mutex_init(&context->audio_mutex, NULL);
 	pthread_mutex_init(&context->replay_mutex, NULL);
