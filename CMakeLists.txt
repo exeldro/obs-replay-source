@@ -7,14 +7,17 @@ if(CMAKE_PROJECT_NAME STREQUAL "obs-studio")
 else()
   set(BUILD_OUT_OF_TREE ON)
   cmake_minimum_required(VERSION 3.18)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 endif()
 
-project(replay-source VERSION 1.6.12)
+project(replay-source VERSION 1.6.13)
 set(PROJECT_FULL_NAME "Replay Source")
 
-# Set new UUIDs when you start to create a new plugin.
-set(MACOS_PACKAGE_UUID "A0B79A76-08BC-420B-AEB9-D1334C3C6244")
-set(MACOS_INSTALLER_UUID "22902D34-AB9A-49EE-8012-F60DCAA89EB8")
+if(BUILD_OUT_OF_TREE)
+	include(compilerconfig)
+	include(defaults)
+	include(helpers)
+endif()
 
 add_library(${PROJECT_NAME} MODULE)
 
@@ -32,7 +35,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 if(BUILD_OUT_OF_TREE)
   find_package(libobs REQUIRED)
   find_package(obs-frontend-api REQUIRED)
-  include(cmake/ObsPluginHelpers.cmake)
   set(OBS_FRONTEND_API_NAME "obs-frontend-api")
   find_package(libcaption)
   target_include_directories(${PROJECT_NAME} PRIVATE
@@ -54,11 +56,8 @@ if(OS_WINDOWS)
 	file(TO_NATIVE_PATH "${ISS_PACKAGE_DIR}" ISS_PACKAGE_DIR)
 	get_filename_component(ISS_SOURCE_DIR "${PROJECT_SOURCE_DIR}" ABSOLUTE)
 	file(TO_NATIVE_PATH "${ISS_SOURCE_DIR}" ISS_SOURCE_DIR)
-	configure_file("installer.iss.in"
-			"${PROJECT_BINARY_DIR}/installer.iss"
-		)
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resource.rc.in ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
-	target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
+	#configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resource.rc.in ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
+	#target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
 	
 	find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
 	include_directories(${FFMPEG_INCLUDE_DIRS})
@@ -111,7 +110,7 @@ if(BUILD_OUT_OF_TREE)
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/${LIB_OUT_DIR})
     install(DIRECTORY data/locale
         DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_OUT_DIR})
-    setup_plugin_target(${PROJECT_NAME})
+	set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 else()
     target_include_directories(${PROJECT_NAME} PRIVATE
         "${CMAKE_SOURCE_DIR}/UI/obs-frontend-api")
