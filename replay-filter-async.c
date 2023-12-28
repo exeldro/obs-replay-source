@@ -2,7 +2,6 @@
 #include <util/circlebuf.h>
 #include <util/threading.h>
 #include "replay.h"
-#include <obs-internal.h>
 #include "media-io/audio-math.h"
 
 static const char *replay_filter_get_name(void *unused)
@@ -73,6 +72,12 @@ static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
 	return (ts1 < ts2) ? (ts2 - ts1) : (ts1 - ts2);
 }
 
+struct async_frame {
+	struct obs_source_frame *frame;
+	long unused_count;
+	bool used;
+};
+
 static struct obs_source_frame *
 replay_filter_video(void *data, struct obs_source_frame *frame)
 {
@@ -94,10 +99,26 @@ replay_filter_video(void *data, struct obs_source_frame *frame)
 		last_timestamp = output->timestamp;
 	}
 	if (target) {
-		pthread_mutex_lock(&target->async_mutex);
-		for (size_t i = 0; i < target->async_cache.num; i++) {
+		if (filter->target_offset == 0) {
+			if (obs_get_version() <
+			    MAKE_SEMANTIC_VERSION(30, 0, 0)) {
+				filter->target_offset = 2000;
+			} else {
+				filter->target_offset = 2008;
+			}
+		}
+		struct darray *async_cache =
+			(struct darray *)((uint8_t *)target +
+					  filter->target_offset);
+		pthread_mutex_t *async_mutex =
+			(pthread_mutex_t *)((uint8_t *)target +
+					    filter->target_offset +
+					    sizeof(struct darray)*2);
+		pthread_mutex_lock(async_mutex);
+		for (size_t i = 0; i < async_cache->num; i++) {
 			struct obs_source_frame *extra_frame =
-				target->async_cache.array[i].frame;
+				((struct async_frame*)async_cache->array)[i]
+					.frame;
 			if (extra_frame->timestamp + filter->timing_adjust >
 			    last_timestamp) {
 				new_frame = obs_source_frame_create(
@@ -127,7 +148,7 @@ replay_filter_video(void *data, struct obs_source_frame *frame)
 					sizeof(struct obs_source_frame *));
 			}
 		}
-		pthread_mutex_unlock(&target->async_mutex);
+		pthread_mutex_unlock(async_mutex);
 	}
 	if (frame->timestamp + filter->timing_adjust > last_timestamp) {
 		new_frame = obs_source_frame_create(frame->format, frame->width,
@@ -198,7 +219,8 @@ static obs_properties_t *replay_filter_properties(void *unused)
 	return props;
 }
 
-static void replay_filter_tick(void *data, float seconds){
+static void replay_filter_tick(void *data, float seconds)
+{
 	UNUSED_PARAMETER(seconds);
 	replay_filter_check(data);
 }

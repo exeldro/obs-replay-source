@@ -33,6 +33,7 @@ struct replay_filter {
 	void (*trigger_threshold)(void *data);
 	void *threshold_data;
 	uint64_t last_check;
+	size_t target_offset;
 };
 
 void free_audio_packet(struct obs_audio_data *audio);

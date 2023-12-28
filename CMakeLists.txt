@@ -34,17 +34,8 @@ if(BUILD_OUT_OF_TREE)
   find_package(obs-frontend-api REQUIRED)
   include(cmake/ObsPluginHelpers.cmake)
   set(OBS_FRONTEND_API_NAME "obs-frontend-api")
-  find_package(libcaption)
-  target_include_directories(${PROJECT_NAME} PRIVATE
-  "${CMAKE_SOURCE_DIR}/../obs-studio/deps/libcaption")
-  target_include_directories(${PROJECT_NAME} PRIVATE
-  "${CMAKE_SOURCE_DIR}/../obs-studio/deps/uthash")
 else()
 	set(OBS_FRONTEND_API_NAME "frontend-api")
-	target_include_directories(${PROJECT_NAME} PRIVATE
-        "${CMAKE_SOURCE_DIR}/deps/libcaption")
-	target_include_directories(${PROJECT_NAME} PRIVATE
-		"${CMAKE_SOURCE_DIR}/deps/uthash")
 endif()
 
 if(OS_WINDOWS)
