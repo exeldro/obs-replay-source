@@ -1,6 +1,9 @@
 # --- Detect if the plugin is build out of tree or not ---
 if(CMAKE_PROJECT_NAME STREQUAL "obs-studio")
   set(BUILD_OUT_OF_TREE OFF)
+  if(OBS_CMAKE_VERSION VERSION_GREATER_EQUAL 3.0.0)
+    legacy_check()
+  endif()
 else()
   set(BUILD_OUT_OF_TREE ON)
   cmake_minimum_required(VERSION 3.18)
@@ -61,8 +64,9 @@ if(OS_WINDOWS)
 	include_directories(${FFMPEG_INCLUDE_DIRS})
 	
 	find_package(libdshowcapture)
-	find_package(libdshowcapture-external)
-	
+	if(OBS_CMAKE_VERSION VERSION_LESS 3.0.0)
+		find_package(libdshowcapture-external)
+	endif()
 	target_sources(${PROJECT_NAME} PRIVATE
 		win-dshow-replay.cpp
 		../win-dshow/ffmpeg-decode.c
@@ -71,7 +75,6 @@ if(OS_WINDOWS)
 
 	target_link_libraries(${PROJECT_NAME}
 		OBS::w32-pthreads
-		OBS::libdshowcapture-external
 		OBS::libdshowcapture
 		setupapi
 		strmiids
@@ -80,6 +83,9 @@ if(OS_WINDOWS)
 		wmcodecdspuuid
 		FFmpeg::avcodec
 		FFmpeg::avutil)
+	if(OBS_CMAKE_VERSION VERSION_LESS 3.0.0)
+		target_link_libraries(${PROJECT_NAME} OBS::libdshowcapture-external)
+	endif()
 elseif(OS_MACOS)
 		set(MACOS_BUNDLEID "com.exeldro.${PROJECT_NAME}")
 		set(MACOSX_PLUGIN_GUI_IDENTIFIER "${MACOS_BUNDLEID}")
@@ -105,9 +111,14 @@ if(BUILD_OUT_OF_TREE)
         LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/${LIB_OUT_DIR})
     install(DIRECTORY data/locale
         DESTINATION ${CMAKE_INSTALL_PREFIX}/${DATA_OUT_DIR})
+    setup_plugin_target(${PROJECT_NAME})
 else()
     target_include_directories(${PROJECT_NAME} PRIVATE
         "${CMAKE_SOURCE_DIR}/UI/obs-frontend-api")
-    set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "plugins/exeldro")
+    if(OBS_CMAKE_VERSION VERSION_GREATER_EQUAL 3.0.0)
+        set_target_properties_obs(${PROJECT_NAME} PROPERTIES FOLDER "plugins/exeldro" PREFIX "")
+    else()
+        set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "plugins/exeldro")
+        setup_plugin_target(${PROJECT_NAME})
+    endif()
 endif()
-setup_plugin_target(${PROJECT_NAME})
