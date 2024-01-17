@@ -1801,7 +1801,9 @@ static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
 	if (!pressed)
 		return;
 
-	const uint64_t timestamp = obs_get_video_frame_time();
+	const uint64_t timestamp = c->pause_timestamp == 0
+				     ? obs_get_video_frame_time()
+				     : c->pause_timestamp;
 	int64_t duration = timestamp - c->start_timestamp;
 	if (c->speed_percent != 100.0f) {
 		duration = (int64_t)(duration * c->speed_percent / 100.0);
@@ -1833,7 +1835,9 @@ static void replay_trim_end_hotkey(void *data, obs_hotkey_id id,
 
 	if (!pressed)
 		return;
-	const uint64_t timestamp = obs_get_video_frame_time();
+
+	const uint64_t timestamp = c->pause_timestamp == 0
+		? obs_get_video_frame_time() : c->pause_timestamp;
 	if (timestamp > c->start_timestamp) {
 		int64_t duration = timestamp - c->start_timestamp;
 		if (c->speed_percent != 100.0f) {
