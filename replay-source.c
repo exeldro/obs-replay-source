@@ -71,6 +71,8 @@ struct replay_source {
 	obs_hotkey_id pause_hotkey;
 	obs_hotkey_id faster_hotkey;
 	obs_hotkey_id slower_hotkey;
+	obs_hotkey_id faster_by_5_hotkey;
+	obs_hotkey_id slower_by_5_hotkey;
 	obs_hotkey_id normal_or_faster_hotkey;
 	obs_hotkey_id normal_or_slower_hotkey;
 	obs_hotkey_id normal_speed_hotkey;
@@ -755,30 +757,60 @@ static void replay_source_deactive(void *data)
 	context->active = false;
 }
 
-static void replay_restart_hotkey(void *data, obs_hotkey_id id,
-				  obs_hotkey_t *hotkey, bool pressed)
+void replay_restart(void *data)
 {
-	UNUSED_PARAMETER(id);
-	UNUSED_PARAMETER(hotkey);
-
 	struct replay_source *c = data;
-
-	if (pressed) {
-		c->restart = true;
-		c->play = true;
-		obs_source_signal(c->source, "media_restart");
-	}
+	c->restart = true;
+	c->play = true;
+	obs_source_signal(c->source, "media_restart");
 }
 
-static void replay_pause_hotkey(void *data, obs_hotkey_id id,
-				obs_hotkey_t *hotkey, bool pressed)
+void replay_stop(void *data)
 {
-	UNUSED_PARAMETER(id);
-	UNUSED_PARAMETER(hotkey);
-
 	struct replay_source *c = data;
+	c->play = false;
+	c->restart = true;
+	obs_source_media_ended(c->source);
+}
 
-	if (pressed) {
+void replay_next(void *data)
+{
+	struct replay_source *context = data;
+	const int replay_count =
+		(int)(context->replays.size / sizeof context->current_replay);
+	if (replay_count == 0)
+		return;
+
+	if (context->replay_position + 1 >= replay_count) {
+		context->replay_position = replay_count - 1;
+	} else {
+		context->replay_position++;
+	}
+	replay_update_position(context, true);
+	blog(LOG_INFO, "[replay_source: '%s'] next switched to replay %i/%i",
+	     obs_source_get_name(context->source), context->replay_position + 1,
+	     replay_count);
+}
+
+void replay_previous(void *data)
+{
+	struct replay_source *context = data;
+	if (context->replay_position <= 0) {
+		context->replay_position = 0;
+	} else {
+		context->replay_position--;
+	}
+	replay_update_position(context, true);
+	blog(LOG_INFO,
+	     "[replay_source: '%s'] previous hotkey switched to replay %i/%i",
+	     obs_source_get_name(context->source), context->replay_position + 1,
+	     (int)(context->replays.size / sizeof context->current_replay));
+}
+
+static void replay_play_pause(void *data, bool pause)
+{
+	struct replay_source *c = data;
+	if (pause) {
 		if (c->play) {
 			c->play = false;
 			c->pause_timestamp = obs_get_video_frame_time();
@@ -793,7 +825,48 @@ static void replay_pause_hotkey(void *data, obs_hotkey_id id,
 			}
 			obs_source_signal(c->source, "media_play");
 		}
+	} else {
+		const int64_t time = obs_get_video_frame_time();
+		if (c->pause_timestamp) {
+			c->start_timestamp += time - c->pause_timestamp;
+			c->pause_timestamp = 0;
+		}
+		c->play = true;
+		if (c->end || (c->video_frame_position == 0 && c->backward)) {
+			c->end = false;
+			if (c->backward) {
+				if (c->current_replay.video_frame_count)
+					c->video_frame_position =
+						c->current_replay
+							.video_frame_count -
+						1;
+			} else {
+				c->video_frame_position = 0;
+			}
+			c->start_timestamp = obs_get_video_frame_time();
+		}
+		obs_source_signal(c->source, "media_play");
 	}
+}
+
+static void replay_restart_hotkey(void *data, obs_hotkey_id id,
+				  obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	if (pressed)
+		replay_restart(data);
+}
+
+static void replay_pause_hotkey(void *data, obs_hotkey_id id,
+				obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	if (pressed)
+		replay_play_pause(data, true);
 }
 
 static void InitFileOutputLossless(struct replay_source *context)
@@ -1467,22 +1540,8 @@ static void replay_next_hotkey(void *data, obs_hotkey_id id,
 	UNUSED_PARAMETER(id);
 	UNUSED_PARAMETER(hotkey);
 
-	struct replay_source *context = data;
-	const int replay_count =
-		(int)(context->replays.size / sizeof context->current_replay);
-	if (!pressed || replay_count == 0)
-		return;
-
-	if (context->replay_position + 1 >= replay_count) {
-		context->replay_position = replay_count - 1;
-	} else {
-		context->replay_position++;
-	}
-	replay_update_position(context, true);
-	blog(LOG_INFO,
-	     "[replay_source: '%s'] next hotkey switched to replay %i/%i",
-	     obs_source_get_name(context->source), context->replay_position + 1,
-	     replay_count);
+	if (pressed)
+		replay_next(data);
 }
 
 static void replay_previous_hotkey(void *data, obs_hotkey_id id,
@@ -1491,19 +1550,9 @@ static void replay_previous_hotkey(void *data, obs_hotkey_id id,
 	UNUSED_PARAMETER(id);
 	UNUSED_PARAMETER(hotkey);
 
-	struct replay_source *context = data;
-	if (!pressed)
-		return;
-	if (context->replay_position <= 0) {
-		context->replay_position = 0;
-	} else {
-		context->replay_position--;
-	}
-	replay_update_position(context, true);
-	blog(LOG_INFO,
-	     "[replay_source: '%s'] previous hotkey switched to replay %i/%i",
-	     obs_source_get_name(context->source), context->replay_position + 1,
-	     (int)(context->replays.size / sizeof context->current_replay));
+	if (pressed)
+		replay_previous(data);
+
 }
 
 static void replay_first_hotkey(void *data, obs_hotkey_id id,
@@ -1679,6 +1728,35 @@ static void replay_slower_hotkey(void *data, obs_hotkey_id id,
 	update_speed(c, c->speed_percent * 2.0f / 3.0f);
 }
 
+static void replay_faster_by_5_hotkey(void *data, obs_hotkey_id id,
+				      obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if (!pressed)
+		return;
+
+	update_speed(c, c->speed_percent + 5.0f);
+}
+
+static void replay_slower_by_5_hotkey(void *data, obs_hotkey_id id,
+				      obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+
+	struct replay_source *c = data;
+
+	if (!pressed)
+		return;
+
+	if (c->speed_percent > 5.0f)
+		update_speed(c, c->speed_percent - 5.0f);
+}
+
 static void replay_normal_or_faster_hotkey(void *data, obs_hotkey_id id,
 					   obs_hotkey_t *hotkey, bool pressed)
 {
@@ -1802,8 +1880,8 @@ static void replay_trim_front_hotkey(void *data, obs_hotkey_id id,
 		return;
 
 	const uint64_t timestamp = c->pause_timestamp == 0
-				     ? obs_get_video_frame_time()
-				     : c->pause_timestamp;
+					   ? obs_get_video_frame_time()
+					   : c->pause_timestamp;
 	int64_t duration = timestamp - c->start_timestamp;
 	if (c->speed_percent != 100.0f) {
 		duration = (int64_t)(duration * c->speed_percent / 100.0);
@@ -1837,7 +1915,8 @@ static void replay_trim_end_hotkey(void *data, obs_hotkey_id id,
 		return;
 
 	const uint64_t timestamp = c->pause_timestamp == 0
-		? obs_get_video_frame_time() : c->pause_timestamp;
+					   ? obs_get_video_frame_time()
+					   : c->pause_timestamp;
 	if (timestamp > c->start_timestamp) {
 		int64_t duration = timestamp - c->start_timestamp;
 		if (c->speed_percent != 100.0f) {
@@ -1955,6 +2034,10 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			replay_faster_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "Slower") == 0) {
 			replay_slower_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Faster5Percent") == 0) {
+			replay_faster_by_5_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "Slower5Percent") == 0) {
+			replay_slower_by_5_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "NormalOrFaster") == 0) {
 			replay_normal_or_faster_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "NormalOrSlower") == 0) {
@@ -2402,6 +2485,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 	context->slower_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.Slower", obs_module_text("Slower"),
 		replay_slower_hotkey, context);
+
+	context->faster_by_5_hotkey =
+		obs_hotkey_register_source(source, "ReplaySource.FasterBy5",
+					   obs_module_text("Faster5Percent"),
+					   replay_faster_by_5_hotkey, context);
+
+	context->slower_by_5_hotkey =
+		obs_hotkey_register_source(source, "ReplaySource.SlowerBy5",
+					   obs_module_text("Slower5Percent"),
+					   replay_slower_by_5_hotkey, context);
 
 	context->normal_or_faster_hotkey = obs_hotkey_register_source(
 		source, "ReplaySource.NormalOrFaster",
@@ -3604,97 +3697,6 @@ static obs_properties_t *replay_source_properties(void *data)
 	return props;
 }
 
-void replay_play_pause(void *data, bool pause)
-{
-	struct replay_source *c = data;
-	if (pause) {
-		if (c->play) {
-			c->play = false;
-			c->pause_timestamp = obs_get_video_frame_time();
-			obs_source_signal(c->source, "media_pause");
-		} else {
-			c->play = true;
-			if (c->pause_timestamp) {
-				c->start_timestamp +=
-					obs_get_video_frame_time() -
-					c->pause_timestamp;
-				c->pause_timestamp = 0;
-			}
-			obs_source_signal(c->source, "media_play");
-		}
-	} else {
-		const int64_t time = obs_get_video_frame_time();
-		if (c->pause_timestamp) {
-			c->start_timestamp += time - c->pause_timestamp;
-			c->pause_timestamp = 0;
-		}
-		c->play = true;
-		if (c->end || (c->video_frame_position == 0 && c->backward)) {
-			c->end = false;
-			if (c->backward) {
-				if (c->current_replay.video_frame_count)
-					c->video_frame_position =
-						c->current_replay
-							.video_frame_count -
-						1;
-			} else {
-				c->video_frame_position = 0;
-			}
-			c->start_timestamp = obs_get_video_frame_time();
-		}
-		obs_source_signal(c->source, "media_play");
-	}
-}
-void replay_restart(void *data)
-{
-	struct replay_source *c = data;
-	c->restart = true;
-	c->play = true;
-	obs_source_signal(c->source, "media_restart");
-}
-
-void replay_stop(void *data)
-{
-	struct replay_source *c = data;
-	c->play = false;
-	c->restart = true;
-	obs_source_media_ended(c->source);
-}
-
-void replay_next(void *data)
-{
-	struct replay_source *context = data;
-	const int replay_count =
-		(int)(context->replays.size / sizeof context->current_replay);
-	if (replay_count == 0)
-		return;
-
-	if (context->replay_position + 1 >= replay_count) {
-		context->replay_position = replay_count - 1;
-	} else {
-		context->replay_position++;
-	}
-	replay_update_position(context, true);
-	blog(LOG_INFO, "[replay_source: '%s'] next switched to replay %i/%i",
-	     obs_source_get_name(context->source), context->replay_position + 1,
-	     replay_count);
-}
-
-void replay_previous(void *data)
-{
-	struct replay_source *context = data;
-	if (context->replay_position <= 0) {
-		context->replay_position = 0;
-	} else {
-		context->replay_position--;
-	}
-	replay_update_position(context, true);
-	blog(LOG_INFO,
-	     "[replay_source: '%s'] previous hotkey switched to replay %i/%i",
-	     obs_source_get_name(context->source), context->replay_position + 1,
-	     (int)(context->replays.size / sizeof context->current_replay));
-}
-
 int64_t replay_get_duration(void *data)
 {
 	struct replay_source *c = data;
@@ -3717,6 +3719,7 @@ int64_t replay_get_time(void *data)
 	}
 	return 0;
 }
+
 void replay_set_time(void *data, int64_t seconds)
 {
 	struct replay_source *c = data;
