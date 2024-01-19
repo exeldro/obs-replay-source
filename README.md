@@ -140,3 +140,7 @@ Enable the capturing of replays, adds the replay filters.
 Disable the automatic next scene switching function.
 * **Enable next scene**
 Enable the automatic next scene switching function.
+* **Previous frame**
+Rewind the playback head one frame. Automatically pauses playback.
+* **Next frame**
+Advance the playback head one frame. Automatically pauses playback.
