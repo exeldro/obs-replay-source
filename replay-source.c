@@ -96,11 +96,14 @@ struct replay_source {
 	obs_hotkey_id next_scene_hotkey;
 	obs_hotkey_id next_frame_hotkey;
 	obs_hotkey_id prev_frame_hotkey;
+	obs_hotkey_id next_n_frames_hotkey;
+	obs_hotkey_id prev_n_frames_hotkey;
 	uint64_t start_timestamp;
 	uint64_t previous_frame_timestamp;
 	uint64_t pause_timestamp;
 	int64_t start_delay;
 	int64_t retrieve_delay;
+	int64_t frame_step_count;
 	uint64_t retrieve_timestamp;
 	uint64_t threshold_timestamp;
 	struct obs_source_audio audio;
@@ -690,6 +693,7 @@ static void replay_source_defaults(obs_data_t *settings)
 	obs_data_set_default_int(settings, SETTING_VISIBILITY_ACTION,
 				 VISIBILITY_ACTION_CONTINUE);
 	obs_data_set_default_int(settings, SETTING_START_DELAY, 0);
+	obs_data_set_default_int(settings, SETTING_FRAME_STEP_COUNT, 5);
 	obs_data_set_default_int(settings, SETTING_END_ACTION, END_ACTION_LOOP);
 	obs_data_set_default_bool(settings, SETTING_BACKWARD, false);
 	obs_data_set_default_string(settings, SETTING_FILE_FORMAT,
@@ -1593,15 +1597,24 @@ void replay_step_frames(void *data, bool pressed, bool forward, uint64_t num_fra
 
 		}
 		c->stepped = true;
-		int64_t prev_time = c->current_replay.video_frames[next_pos]->timestamp;
-		int64_t next_time =  c->current_replay.video_frames[c->video_frame_position]->timestamp;
+		int64_t next_time = c->current_replay.video_frames[next_pos]->timestamp;
+		int64_t prev_time =  c->current_replay.video_frames[c->video_frame_position]->timestamp;
 		int64_t time_diff = (int64_t)((next_time - prev_time) * 100 / c->speed_percent);
 		if (c->backward) {
 			time_diff *= -1;
 		}
-		c->start_timestamp += time_diff;
+		c->start_timestamp -= time_diff;
 		c->video_frame_position = next_pos;
 	}
+}
+
+static void replay_next_n_frames_hotkey(void *data, obs_hotkey_id id,
+			       obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+	struct replay_source *c = data;
+	replay_step_frames(data, pressed, true, c->frame_step_count);
 }
 
 static void replay_next_frame_hotkey(void *data, obs_hotkey_id id,
@@ -1610,6 +1623,15 @@ static void replay_next_frame_hotkey(void *data, obs_hotkey_id id,
 	UNUSED_PARAMETER(id);
 	UNUSED_PARAMETER(hotkey);
 	replay_step_frames(data, pressed, true, 1);
+}
+
+static void replay_prev_n_frames_hotkey(void *data, obs_hotkey_id id,
+			       obs_hotkey_t *hotkey, bool pressed)
+{
+	UNUSED_PARAMETER(id);
+	UNUSED_PARAMETER(hotkey);
+	struct replay_source *c = data;
+	replay_step_frames(data, pressed, false, c->frame_step_count);
 }
 
 static void replay_prev_frame_hotkey(void *data, obs_hotkey_id id,
@@ -2169,7 +2191,12 @@ static void replay_source_update(void *data, obs_data_t *settings)
 			replay_next_frame_hotkey(context, 0, NULL, true);
 		} else if (strcmp(execute_action, "PrevFrame") == 0) {
 			replay_prev_frame_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "NextNFrames") == 0) {
+			replay_next_n_frames_hotkey(context, 0, NULL, true);
+		} else if (strcmp(execute_action, "PrevNFrames") == 0) {
+			replay_prev_n_frames_hotkey(context, 0, NULL, true);
 		}
+
 		obs_data_erase(settings, SETTING_EXECUTE_ACTION);
 	}
 	const char *source_name = obs_data_get_string(settings, SETTING_SOURCE);
@@ -2263,6 +2290,8 @@ static void replay_source_update(void *data, obs_data_t *settings)
 		obs_data_get_int(settings, SETTING_START_DELAY) * 1000000;
 	context->retrieve_delay =
 		obs_data_get_int(settings, SETTING_RETRIEVE_DELAY) * 1000000;
+	context->frame_step_count =
+		obs_data_get_int(settings, SETTING_FRAME_STEP_COUNT);
 
 	context->replay_max = (int)obs_data_get_int(settings, SETTING_REPLAYS);
 	replay_purge_replays(context);
@@ -2681,6 +2710,16 @@ static void *replay_source_create(obs_data_t *settings, obs_source_t *source)
 		obs_hotkey_register_source(source, "ReplaySource.NextFrame",
 		obs_module_text("NextFrame"),
 		replay_next_frame_hotkey, context);
+
+	context->prev_n_frames_hotkey =
+		obs_hotkey_register_source(source, "ReplaySource.PrevNFrames",
+		obs_module_text("PrevNFrames"),
+		replay_prev_n_frames_hotkey, context);
+
+	context->next_n_frames_hotkey =
+		obs_hotkey_register_source(source, "ReplaySource.NextNFrames",
+		obs_module_text("NextNFrames"),
+		replay_next_n_frames_hotkey, context);
 
 	return context;
 }
@@ -3199,9 +3238,8 @@ static void replay_source_tick(void *data, float seconds)
 			}
 			if (context->video_frame_position == 0) {
 				replay_source_end_action(context);
-			} else  {
-				replay_output_frame(context, output_frame);
 			}
+			replay_output_frame(context, output_frame);
 		} else {
 			if (context->restart) {
 				context->video_frame_position = 0;
@@ -3395,9 +3433,8 @@ static void replay_source_tick(void *data, float seconds)
 						.video_frame_count -
 					1;
 				replay_source_end_action(context);
-			} else {
-				replay_output_frame(context, output_frame);
 			}
+			replay_output_frame(context, output_frame);
 		}
 	} else if (context->current_replay.audio_frame_count) {
 		//no video, only audio
@@ -3691,6 +3728,9 @@ static obs_properties_t *replay_source_properties(void *data)
 				      obs_module_text("StartDelay"), -100000,
 				      100000, 1000);
 	obs_property_int_set_suffix(prop, "ms");
+	prop = obs_properties_add_int(props, SETTING_FRAME_STEP_COUNT,
+				      obs_module_text("FrameStepCount"), 1,
+				      1000, 1);
 
 	prop = obs_properties_add_list(props, SETTING_END_ACTION,
 				       obs_module_text("EndAction"),

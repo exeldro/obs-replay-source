@@ -144,3 +144,7 @@ Enable the automatic next scene switching function.
 Rewind the playback head one frame. Automatically pauses playback.
 * **Next frame**
 Advance the playback head one frame. Automatically pauses playback.
+* **Previous N frames**
+Rewind the playback head N frames. Automatically pauses playback. Set N in source settings.
+* **Next N frames**
+Advance the playback head N frames. Automatically pauses playback. Set N in source settings.
