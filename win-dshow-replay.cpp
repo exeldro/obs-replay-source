@@ -261,7 +261,6 @@ struct DShowReplayInput {
 
 	inline ~DShowReplayInput()
 	{
-		pthread_mutex_destroy(&replay_filter.mutex);
 		{
 			CriticalScope scope(mutex);
 			actions.resize(1);
@@ -271,6 +270,13 @@ struct DShowReplayInput {
 		ReleaseSemaphore(semaphore, 1, nullptr);
 
 		WaitForSingleObject(thread, INFINITE);
+		pthread_mutex_lock(&replay_filter.mutex);
+		free_video_data(&replay_filter);
+		free_audio_data(&replay_filter);
+		pthread_mutex_unlock(&replay_filter.mutex);
+		circlebuf_free(&replay_filter.video_frames);
+		circlebuf_free(&replay_filter.audio_frames);
+		pthread_mutex_destroy(&replay_filter.mutex);
 	}
 
 	void OnVideoOutput(obs_source_frame2 *frame);

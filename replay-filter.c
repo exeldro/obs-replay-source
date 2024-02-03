@@ -235,7 +235,7 @@ static void replay_filter_destroy(void *data)
 	gs_texrender_destroy(filter->texrender);
 
 	free_video_data(filter);
-	free_video_data(filter);
+	free_audio_data(filter);
 	pthread_mutex_unlock(&filter->mutex);
 	circlebuf_free(&filter->video_frames);
 	circlebuf_free(&filter->audio_frames);
