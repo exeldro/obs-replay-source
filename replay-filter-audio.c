@@ -5,7 +5,6 @@
 #include <media-io/video-frame.h>
 #include <media-io/audio-math.h>
 #include <media-io/audio-resampler.h>
-#include <util/circlebuf.h>
 #include "replay.h"
 
 static const char *replay_filter_get_name(void *unused)
@@ -85,7 +84,8 @@ static obs_properties_t *replay_filter_properties(void *unused)
 	return props;
 }
 
-static void replay_filter_tick(void *data, float seconds){
+static void replay_filter_tick(void *data, float seconds)
+{
 	UNUSED_PARAMETER(seconds);
 	replay_filter_check(data);
 }

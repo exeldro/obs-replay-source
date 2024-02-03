@@ -1,6 +1,6 @@
-#include "replay.h"
 #include "version.h"
 #include <math.h>
+#include "replay.h"
 
 void free_audio_data(struct replay_filter *filter)
 {

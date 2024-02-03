@@ -4,7 +4,6 @@
 #include <media-io/video-io.h>
 #include <media-io/video-frame.h>
 #include <media-io/audio-resampler.h>
-#include <util/circlebuf.h>
 #include "replay.h"
 
 #define TEXFORMAT GS_BGRA

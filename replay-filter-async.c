@@ -1,8 +1,7 @@
 #include <obs-module.h>
-#include <util/circlebuf.h>
 #include <util/threading.h>
-#include "replay.h"
 #include "media-io/audio-math.h"
+#include "replay.h"
 
 static const char *replay_filter_get_name(void *unused)
 {
@@ -113,11 +112,11 @@ replay_filter_video(void *data, struct obs_source_frame *frame)
 		pthread_mutex_t *async_mutex =
 			(pthread_mutex_t *)((uint8_t *)target +
 					    filter->target_offset +
-					    sizeof(struct darray)*2);
+					    sizeof(struct darray) * 2);
 		pthread_mutex_lock(async_mutex);
 		for (size_t i = 0; i < async_cache->num; i++) {
 			struct obs_source_frame *extra_frame =
-				((struct async_frame*)async_cache->array)[i]
+				((struct async_frame *)async_cache->array)[i]
 					.frame;
 			if (extra_frame->timestamp + filter->timing_adjust >
 			    last_timestamp) {

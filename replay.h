@@ -1,7 +1,21 @@
 #pragma once
 #include <obs-module.h>
-#include <util/circlebuf.h>
 #include <util/threading.h>
+
+#if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 1, 0)
+#include <util/deque.h>
+#define circlebuf_peek_front deque_peek_front
+#define circlebuf_peek_back deque_peek_back
+#define circlebuf_push_front deque_push_front
+#define circlebuf_push_back deque_push_back
+#define circlebuf_pop_front deque_pop_front
+#define circlebuf_pop_back deque_pop_back
+#define circlebuf_init deque_init
+#define circlebuf_free deque_free
+#define circlebuf_data deque_data
+#else
+#include <util/circlebuf.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,11 +23,19 @@ extern "C" {
 
 struct replay_filter {
 
+#if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 1, 0)
+	/* contains struct obs_source_frame* */
+	struct deque video_frames;
+
+	/* stores the audio data */
+	struct deque audio_frames;
+#else
 	/* contains struct obs_source_frame* */
 	struct circlebuf video_frames;
 
 	/* stores the audio data */
 	struct circlebuf audio_frames;
+#endif
 
 	struct obs_video_info ovi;
 	struct audio_convert_info oai;

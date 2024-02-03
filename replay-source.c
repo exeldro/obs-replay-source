@@ -118,7 +118,11 @@ struct replay_source {
 
 	int replay_position;
 	int replay_max;
+#if LIBOBS_API_VER >= MAKE_SEMANTIC_VERSION(30, 1, 0)
+	struct deque replays;
+#else
 	struct circlebuf replays;
+#endif
 	struct replay current_replay;
 	struct replay saving_replay;
 
@@ -1721,7 +1725,7 @@ void replay_step_frames(void *data, bool pressed, bool forward,
 			c->pause_timestamp += time_diff;
 		}
 	}
-	
+
 	c->video_frame_position = next_pos;
 }
 
