@@ -3,6 +3,10 @@
 #include <util/circlebuf.h>
 #include <util/threading.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct replay_filter {
 
 	/* contains struct obs_source_frame* */
@@ -95,4 +99,8 @@ void replay_filter_check(void *data);
 #endif
 #ifndef MAX_TS_VAR
 #define MAX_TS_VAR 2000000000ULL
+#endif
+
+#ifdef __cplusplus
+}
 #endif
