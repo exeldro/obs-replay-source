@@ -1583,6 +1583,13 @@ replay_restart_at_begin(struct replay_source *c, const uint64_t os_timestamp)
 	c->start_timestamp = os_timestamp;
 	c->pause_timestamp = c->play ? 0 : os_timestamp;
 	c->audio_frame_position = 0;
+	const int64_t duration =
+		(int64_t)(((int64_t)c->current_replay.last_frame_timestamp -
+			   (int64_t)c->current_replay.first_frame_timestamp) *
+			  100.0 / c->speed_percent);
+	if (c->backward) {
+		c->start_timestamp -= duration;
+	}
 	struct obs_source_frame *frame =
 		c->current_replay.video_frames[c->video_frame_position];
 	if (c->current_replay.trim_front != 0) {
@@ -1615,7 +1622,10 @@ replay_restart_at_end(struct replay_source *c, const uint64_t os_timestamp)
 		(int64_t)(((int64_t)c->current_replay.last_frame_timestamp -
 			   (int64_t)c->current_replay.first_frame_timestamp) *
 			  100.0 / c->speed_percent);
-	c->start_timestamp = os_timestamp - duration;
+	c->start_timestamp = os_timestamp;
+	if (!c->backward) {
+		c->start_timestamp -= duration;
+	}
 	c->pause_timestamp = c->play ? 0 : os_timestamp;
 	c->restart = false;
 	if (c->current_replay.trim_end != 0) {
@@ -1710,22 +1720,7 @@ void replay_step_frames(void *data, bool pressed, bool forward,
 	if (c->backward) {
 		time_diff *= -1;
 	}
-	if (c->play) {
-		c->play = false;
-		c->pause_timestamp = os_timestamp;
-		obs_source_signal(c->source, "media_pause");
-	} else if (time_diff != 0) {
-		if (c->pause_timestamp == 0) {
-			c->start_timestamp += time_diff;
-			c->pause_timestamp = os_timestamp;
-		} else if (c->pause_timestamp + time_diff <=
-			   c->start_timestamp) {
-			c->start_timestamp += time_diff;
-		} else {
-			c->pause_timestamp += time_diff;
-		}
-	}
-
+	c->start_timestamp -= time_diff;
 	c->video_frame_position = next_pos;
 }
 
@@ -3292,7 +3287,7 @@ static void replay_source_tick(void *data, float seconds)
 			}
 
 			const int64_t video_duration =
-				os_timestamp -
+				(int64_t)os_timestamp -
 				(int64_t)context->start_timestamp;
 			//TODO audio backwards
 			int64_t source_duration =
