@@ -102,8 +102,11 @@ replay_filter_video(void *data, struct obs_source_frame *frame)
 			if (obs_get_version() <
 			    MAKE_SEMANTIC_VERSION(30, 0, 0)) {
 				filter->target_offset = 2000;
-			} else {
+			} else if (obs_get_version() <
+				   MAKE_SEMANTIC_VERSION(30, 2, 0)) {
 				filter->target_offset = 2008;
+			} else {
+				filter->target_offset = 2000;
 			}
 		}
 		struct darray *async_cache =

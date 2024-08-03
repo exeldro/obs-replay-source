@@ -7,7 +7,6 @@
 #include <media-io/video-frame.h>
 #include <media-io/video-scaler.h>
 #include <obs-frontend-api.h>
-#include <obs-scene.h>
 #include "replay.h"
 #include <inttypes.h>
 #include <string.h>
@@ -292,7 +291,7 @@ static bool EnumSceneItem(obs_scene_t *scene, obs_sceneitem_t *item, void *data)
 {
 	UNUSED_PARAMETER(scene);
 	struct siu *siu = data;
-	if (item->source == siu->source) {
+	if (obs_sceneitem_get_source(item) == siu->source) {
 		struct obs_sceneitem_crop crop;
 		obs_sceneitem_get_crop(item, &crop);
 		crop.left = 0;

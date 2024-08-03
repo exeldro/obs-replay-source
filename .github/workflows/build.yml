@@ -29,13 +29,13 @@ jobs:
         shell: zsh {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.1
         with:
           path: plugin
           submodules: recursive
 
       - name: Checkout obs-studio
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4.1.1
         with:
           repository: 'obsproject/obs-studio'
           path: obs-studio
@@ -79,7 +79,7 @@ jobs:
 
       - name: Restore Compilation Cache
         id: ccache-cache
-        uses: actions/cache@v3.0.11
+        uses: actions/cache@v4.0.0
         with:
           path: ${{ github.workspace }}/.ccache
           key: macos-${{ matrix.arch }}-ccache-plugin-${{ steps.setup.outputs.ccacheDate }}
@@ -133,7 +133,7 @@ jobs:
           codesignPass: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
 
       - name: Upload Build Artifact
-        uses: actions/upload-artifact@v3.1.1
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: ${{ env.PLUGIN_NAME }}-macos-${{ matrix.arch }}-${{ steps.setup.outputs.commitHash }}
           path: ${{ github.workspace }}/plugin/release/${{ env.PLUGIN_NAME }}-*-macos-${{ matrix.arch }}.pkg
@@ -146,13 +146,13 @@ jobs:
         ubuntu: ['ubuntu-20.04', 'ubuntu-22.04']
     steps:
       - name: Checkout
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.1
         with:
           repository: obsproject/obs-studio
           ref: ${{ env.OBS_VERSION }}
           submodules: 'recursive'
       - name: "Checkout plugin"
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.1
         with:
           path: plugins/${{ env.PLUGIN_NAME }}
       - name: Add plugin to obs cmake
@@ -182,7 +182,7 @@ jobs:
           mv ./plugins/${{ env.PLUGIN_NAME }}/data ./${{ env.PLUGIN_NAME }}/data
           tar -cvzf "${FILE_NAME}" ${{ env.PLUGIN_NAME }}
       - name: 'Publish'
-        uses: actions/upload-artifact@v3.1.1
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: '${{ env.FILE_NAME }}'
           path: '*.tar.gz'
@@ -190,7 +190,7 @@ jobs:
     name: 'Windows Build'
     runs-on: [windows-latest]
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         target: [x64, x86]
         include:
@@ -207,20 +207,22 @@ jobs:
       WINDOWS_DEPS_VERSION: '2023-04-12'
     steps:
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.1.3
+        uses: microsoft/setup-msbuild@v2
       - name: Checkout obs
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.1
         with:
           repository: obsproject/obs-studio
           ref: ${{ env.OBS_VERSION }}
           submodules: 'recursive'
       - name: Checkout plugin
-        uses: actions/checkout@v3.1.0
+        uses: actions/checkout@v4.1.1
         with:
           path: plugins/${{ env.PLUGIN_NAME}}
       - name: Add plugin to obs cmake
         shell: cmd
-        run: echo add_subdirectory(${{ env.PLUGIN_NAME }}) >> plugins/CMakeLists.txt
+        run: |
+          echo add_subdirectory(${{ env.PLUGIN_NAME }}) >> plugins/CMakeLists.txt
+          echo int __cdecl __ms_vsnprintf(char *s, size_t n, const char *format, va_list arg){ return 0; } >> libobs/obs.c
       - name: Fetch Git Tags
         run: git fetch --prune --tags --unshallow
       - name: 'Install prerequisite: QT'
@@ -252,13 +254,13 @@ jobs:
           exit 0
       - name: Publish zip
         if: success()
-        uses: actions/upload-artifact@v3.1.1
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: '${{ env.FILE_NAME }}'
           path: package/*
       - name: Publish Installer Files
-        if: success()
-        uses: actions/upload-artifact@v3.1.1
+        if: success() && matrix.target == 'x64'
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: 'installer-files'
           path: installer/*
@@ -279,23 +281,23 @@ jobs:
           $env:FILE_NAME_X64="${{ env.PLUGIN_NAME }}-${{ github.sha }}-windows-x64"
           echo "FILE_NAME_X64=${env:FILE_NAME_X64}" >> ${env:GITHUB_ENV}
       - name: Retrieve x86 build
-        uses: actions/download-artifact@v3.0.1
+        uses: actions/download-artifact@v4.1.2
         with:
           name: '${{ env.FILE_NAME_X86 }}'
           path: ./package
       - name: Retrieve x64 build
-        uses: actions/download-artifact@v3.0.1
+        uses: actions/download-artifact@v4.1.2
         with:
           name: '${{ env.FILE_NAME_X64 }}'
           path: ./package
       - name: Retrieve installer files
-        uses: actions/download-artifact@v3.0.1
+        uses: actions/download-artifact@v4.1.2
         with:
           name: 'installer-files'
           path: .
       - name: Publish zip
         if: success()
-        uses: actions/upload-artifact@v3.1.1
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: '${{ env.FILE_NAME }}'
           path: package/*
@@ -308,11 +310,11 @@ jobs:
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /Qp ".\installer.iss"
       - name: Publish installer
         if: success()
-        uses: actions/upload-artifact@v3.1.1
+        uses: actions/upload-artifact@v4.3.1
         with:
           name: '${{ env.FILE_NAME }}-installer'
           path: package/*.exe
       - name: Remove temp artifacts
-        uses: geekyeggo/delete-artifact@v2.0.0
+        uses: geekyeggo/delete-artifact@v4.1.0
         with:
           name: "${{ env.FILE_NAME_X86 }}\n${{ env.FILE_NAME_X64 }}"
