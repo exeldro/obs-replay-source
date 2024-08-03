@@ -1,5 +1,6 @@
 #include "version.h"
 #include <math.h>
+#include <util/platform.h>
 #include "replay.h"
 
 void free_audio_data(struct replay_filter *filter)
@@ -7,8 +8,7 @@ void free_audio_data(struct replay_filter *filter)
 	while (filter->audio_frames.size) {
 		struct obs_audio_data audio;
 
-		circlebuf_pop_front(&filter->audio_frames, &audio,
-				    sizeof(struct obs_audio_data));
+		circlebuf_pop_front(&filter->audio_frames, &audio, sizeof(struct obs_audio_data));
 		free_audio_packet(&audio);
 	}
 }
@@ -18,8 +18,7 @@ void free_video_data(struct replay_filter *filter)
 	while (filter->video_frames.size) {
 		struct obs_source_frame *frame;
 
-		circlebuf_pop_front(&filter->video_frames, &frame,
-				    sizeof(struct obs_source_frame *));
+		circlebuf_pop_front(&filter->video_frames, &frame, sizeof(struct obs_source_frame *));
 
 		if (os_atomic_dec_long(&frame->refs) <= 0) {
 			obs_source_frame_destroy(frame);
@@ -34,14 +33,12 @@ static inline uint64_t uint64_diff(uint64_t ts1, uint64_t ts2)
 
 EXPORT uint64_t os_gettime_ns(void);
 
-struct obs_audio_data *replay_filter_audio(void *data,
-					   struct obs_audio_data *audio)
+struct obs_audio_data *replay_filter_audio(void *data, struct obs_audio_data *audio)
 {
 	struct replay_filter *filter = data;
 	struct obs_audio_data cached = *audio;
 	bool threshold_trigger = !filter->trigger_threshold;
-	if (filter->oai.samples_per_sec == 0 ||
-	    filter->oai.format != AUDIO_FORMAT_FLOAT_PLANAR) {
+	if (filter->oai.samples_per_sec == 0 || filter->oai.format != AUDIO_FORMAT_FLOAT_PLANAR) {
 		struct obs_audio_info oai;
 		obs_get_audio_info(&oai);
 		filter->oai.format = AUDIO_FORMAT_FLOAT_PLANAR;
@@ -53,13 +50,10 @@ struct obs_audio_data *replay_filter_audio(void *data,
 		if (!audio->data[i])
 			break;
 
-		cached.data[i] =
-			bmemdup(audio->data[i], audio->frames * sizeof(float));
+		cached.data[i] = bmemdup(audio->data[i], audio->frames * sizeof(float));
 
-		for (size_t j = 0; !threshold_trigger && j < audio->frames;
-		     j++) {
-			if (fabsf(((float *)audio->data[i])[j]) >
-			    filter->threshold)
+		for (size_t j = 0; !threshold_trigger && j < audio->frames; j++) {
+			if (fabsf(((float *)audio->data[i])[j]) > filter->threshold)
 				threshold_trigger = true;
 		}
 	}
@@ -69,8 +63,7 @@ struct obs_audio_data *replay_filter_audio(void *data,
 	const uint64_t timestamp = cached.timestamp;
 	uint64_t adjusted_time = timestamp + filter->timing_adjust;
 	const uint64_t os_time = os_gettime_ns();
-	if (filter->timing_adjust &&
-	    uint64_diff(os_time, timestamp) < MAX_TS_VAR) {
+	if (filter->timing_adjust && uint64_diff(os_time, timestamp) < MAX_TS_VAR) {
 		adjusted_time = timestamp;
 		filter->timing_adjust = 0;
 	} else if (uint64_diff(os_time, adjusted_time) > MAX_TS_VAR) {
@@ -86,15 +79,12 @@ struct obs_audio_data *replay_filter_audio(void *data,
 	circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
 
 	uint64_t cur_duration = adjusted_time - cached.timestamp;
-	while (filter->audio_frames.size > sizeof(cached) &&
-	       cur_duration >= filter->duration + MAX_TS_VAR) {
+	while (filter->audio_frames.size > sizeof(cached) && cur_duration >= filter->duration + MAX_TS_VAR) {
 
-		circlebuf_pop_front(&filter->audio_frames, NULL,
-				    sizeof(cached));
+		circlebuf_pop_front(&filter->audio_frames, NULL, sizeof(cached));
 
 		free_audio_packet(&cached);
-		circlebuf_peek_front(&filter->audio_frames, &cached,
-				     sizeof(cached));
+		circlebuf_peek_front(&filter->audio_frames, &cached, sizeof(cached));
 		cur_duration = adjusted_time - cached.timestamp;
 	}
 	pthread_mutex_unlock(&filter->mutex);
@@ -109,10 +99,6 @@ extern struct obs_source_info replay_filter_audio_info;
 extern struct obs_source_info replay_filter_async_info;
 extern struct obs_source_info replay_source_info;
 
-#if defined(_WIN32)
-extern void RegisterDShowReplaySource();
-#endif
-
 bool obs_module_load(void)
 {
 	blog(LOG_INFO, "[Replay Source] loaded version %s", PROJECT_VERSION);
@@ -120,9 +106,6 @@ bool obs_module_load(void)
 	obs_register_source(&replay_filter_info);
 	obs_register_source(&replay_filter_audio_info);
 	obs_register_source(&replay_filter_async_info);
-#if defined(_WIN32)
-	RegisterDShowReplaySource();
-#endif
 	return true;
 }
 
@@ -151,26 +134,21 @@ const char *obs_module_author(void)
 void replay_filter_check(void *data)
 {
 	struct replay_filter *filter = data;
-	if (filter->last_check &&
-	    filter->last_check + 3 * SEC_TO_NSEC > obs_get_video_frame_time())
+	if (filter->last_check && filter->last_check + 3 * SEC_TO_NSEC > obs_get_video_frame_time())
 		return;
 	filter->last_check = obs_get_video_frame_time();
-	obs_source_t *s =
-		obs_get_source_by_name(obs_source_get_name(filter->src));
+	obs_source_t *s = obs_get_source_by_name(obs_source_get_name(filter->src));
 	if (s) {
 		if (!filter->trigger_threshold) {
 			obs_data_t *settings = obs_source_get_settings(s);
-			if (obs_data_get_bool(settings,
-					      SETTING_SOUND_TRIGGER)) {
+			if (obs_data_get_bool(settings, SETTING_SOUND_TRIGGER)) {
 				filter->threshold_data = obs_obj_get_data(s);
-				filter->trigger_threshold =
-					replay_trigger_threshold;
+				filter->trigger_threshold = replay_trigger_threshold;
 			}
 			obs_data_release(settings);
 		}
 		obs_source_release(s);
 	} else {
-		obs_source_filter_remove(obs_filter_get_parent(filter->src),
-					 filter->src);
+		obs_source_filter_remove(obs_filter_get_parent(filter->src), filter->src);
 	}
 }

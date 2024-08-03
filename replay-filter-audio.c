@@ -17,16 +17,13 @@ static void replay_filter_update(void *data, obs_data_t *settings)
 {
 	struct replay_filter *filter = data;
 
-	const uint64_t new_duration =
-		(uint64_t)obs_data_get_int(settings, SETTING_DURATION) *
-		MSEC_TO_NSEC;
+	const uint64_t new_duration = (uint64_t)obs_data_get_int(settings, SETTING_DURATION) * MSEC_TO_NSEC;
 
 	if (new_duration < filter->duration)
 		free_video_data(filter);
 
 	filter->duration = new_duration;
-	const double db =
-		obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
+	const double db = obs_data_get_double(settings, SETTING_AUDIO_THRESHOLD);
 	filter->threshold = db_to_mul((float)db);
 }
 
@@ -72,13 +69,10 @@ static obs_properties_t *replay_filter_properties(void *unused)
 
 	obs_properties_t *props = obs_properties_create();
 
-	obs_property_t *prop = obs_properties_add_int(
-		props, SETTING_DURATION, obs_module_text("Duration"),
-		SETTING_DURATION_MIN, SETTING_DURATION_MAX, 1000);
+	obs_property_t *prop = obs_properties_add_int(props, SETTING_DURATION, obs_module_text("Duration"), SETTING_DURATION_MIN,
+						      SETTING_DURATION_MAX, 1000);
 	obs_property_int_set_suffix(prop, "ms");
-	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD,
-					obs_module_text("ThresholdDb"),
-					SETTING_AUDIO_THRESHOLD_MIN,
+	obs_properties_add_float_slider(props, SETTING_AUDIO_THRESHOLD, obs_module_text("ThresholdDb"), SETTING_AUDIO_THRESHOLD_MIN,
 					SETTING_AUDIO_THRESHOLD_MAX, 0.1);
 
 	return props;

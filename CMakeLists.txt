@@ -9,7 +9,7 @@ else()
   cmake_minimum_required(VERSION 3.18)
 endif()
 
-project(replay-source VERSION 1.7.0)
+project(replay-source VERSION 1.8.0)
 set(PROJECT_FULL_NAME "Replay Source")
 
 # Set new UUIDs when you start to create a new plugin.
@@ -50,33 +50,6 @@ if(OS_WINDOWS)
 		)
 	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/resource.rc.in ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
 	target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.rc)
-	
-	find_package(FFmpeg REQUIRED COMPONENTS avcodec avutil)
-	include_directories(${FFMPEG_INCLUDE_DIRS})
-	
-	find_package(libdshowcapture)
-	if(OBS_CMAKE_VERSION VERSION_LESS 3.0.0)
-		find_package(libdshowcapture-external)
-	endif()
-	target_sources(${PROJECT_NAME} PRIVATE
-		win-dshow-replay.cpp
-		../win-dshow/ffmpeg-decode.c
-		replay-source.rc
-		../win-dshow/ffmpeg-decode.h)
-
-	target_link_libraries(${PROJECT_NAME}
-		OBS::w32-pthreads
-		OBS::libdshowcapture
-		setupapi
-		strmiids
-		ksuser
-		winmm
-		wmcodecdspuuid
-		FFmpeg::avcodec
-		FFmpeg::avutil)
-	if(OBS_CMAKE_VERSION VERSION_LESS 3.0.0)
-		target_link_libraries(${PROJECT_NAME} OBS::libdshowcapture-external)
-	endif()
 elseif(OS_MACOS)
 		set(MACOS_BUNDLEID "com.exeldro.${PROJECT_NAME}")
 		set(MACOSX_PLUGIN_GUI_IDENTIFIER "${MACOS_BUNDLEID}")
