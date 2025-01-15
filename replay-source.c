@@ -488,9 +488,7 @@ static void replay_update_position(struct replay_source *context, bool lock)
 		context->current_replay.audio_frame_count = 0;
 		context->current_replay.audio_frames = NULL;
 		context->replay_position = 0;
-		struct obs_source_frame *f = obs_source_frame_create(VIDEO_FORMAT_NONE, 0, 0);
-		obs_source_output_video(context->source, f);
-		obs_source_frame_destroy(f);
+		obs_source_output_video(context->source, NULL);
 		pthread_mutex_unlock(&context->audio_mutex);
 		if (lock)
 			pthread_mutex_unlock(&context->video_mutex);
@@ -1622,9 +1620,7 @@ static void replay_clear_hotkey(void *data, obs_hotkey_id id, obs_hotkey_t *hotk
 	obs_source_media_ended(context->source);
 	pthread_mutex_unlock(&context->audio_mutex);
 	pthread_mutex_unlock(&context->video_mutex);
-	struct obs_source_frame *f = obs_source_frame_create(VIDEO_FORMAT_NONE, 0, 0);
-	obs_source_output_video(context->source, f);
-	obs_source_frame_destroy(f);
+	obs_source_output_video(context->source, NULL);
 	pthread_mutex_lock(&context->replay_mutex);
 	while (context->replays.size) {
 		struct replay replay;
@@ -2678,9 +2674,7 @@ static void replay_source_tick(void *data, float seconds)
 	}
 	if (!context->play) {
 		if (context->end && (context->end_action == END_ACTION_HIDE || context->end_action == END_ACTION_HIDE_ALL)) {
-			struct obs_source_frame *f = obs_source_frame_create(VIDEO_FORMAT_NONE, 0, 0);
-			obs_source_output_video(context->source, f);
-			obs_source_frame_destroy(f);
+			obs_source_output_video(context->source, NULL);
 		}
 		if (context->stepped) {
 			context->stepped = false;
