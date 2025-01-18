@@ -6,7 +6,7 @@ else()
   cmake_minimum_required(VERSION 3.18)
 endif()
 
-project(replay-source VERSION 1.8.0)
+project(replay-source VERSION 1.8.1)
 set(PROJECT_FULL_NAME "Replay Source")
 
 # Set new UUIDs when you start to create a new plugin.
