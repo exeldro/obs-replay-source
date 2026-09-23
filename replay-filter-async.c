@@ -91,10 +91,14 @@ static struct obs_source_frame *replay_filter_video(void *data, struct obs_sourc
 	}
 	if (target) {
 		if (filter->target_offset == 0) {
-			if (obs_get_version() < MAKE_SEMANTIC_VERSION(30, 0, 0)) {
+			// (uint8_t *)&source->async_cache - (uint8_t *)source
+			uint32_t obs_version = obs_get_version();
+			if (obs_version < MAKE_SEMANTIC_VERSION(30, 0, 0)) {
 				filter->target_offset = 2000;
-			} else if (obs_get_version() < MAKE_SEMANTIC_VERSION(30, 2, 0)) {
+			} else if (obs_version < MAKE_SEMANTIC_VERSION(30, 2, 0)) {
 				filter->target_offset = 2008;
+			} else if (obs_version >= MAKE_SEMANTIC_VERSION(32, 0, 0)) {
+				filter->target_offset = 2016;
 			} else {
 				filter->target_offset = 2000;
 			}
