@@ -77,15 +77,6 @@ jobs:
           print "ccacheDate=$(date +"%Y-%m-%d")" >> $GITHUB_OUTPUT
           print "commitHash=${"$(git rev-parse HEAD)"[0,9]}" >> $GITHUB_OUTPUT
 
-      - name: Restore Compilation Cache
-        id: ccache-cache
-        uses: actions/cache@v4.0.0
-        with:
-          path: ${{ github.workspace }}/.ccache
-          key: macos-${{ matrix.arch }}-ccache-plugin-${{ steps.setup.outputs.ccacheDate }}
-          restore-keys: |
-            macos-${{ matrix.arch }}-ccache-plugin-
-
       - name: Check for GitHub Labels
         id: seekingTesters
         if: ${{ github.event_name == 'pull_request' }}
@@ -143,7 +134,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ubuntu: ['ubuntu-20.04', 'ubuntu-22.04']
+        ubuntu: ['ubuntu-22.04']
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -188,7 +179,7 @@ jobs:
           path: '*.tar.gz'
   windows-build:
     name: 'Windows Build'
-    runs-on: [windows-latest]
+    runs-on: [windows-2022]
     strategy:
       fail-fast: false
       matrix:
@@ -221,7 +212,7 @@ jobs:
       - name: Add plugin to obs cmake
         shell: cmd
         run: |
-          echo add_subdirectory(${{ env.PLUGIN_NAME }}) >> plugins/CMakeLists.txt
+          echo add_subdirectory(${{ env.PLUGIN_NAME }}) > plugins/CMakeLists.txt
           echo int __cdecl __ms_vsnprintf(char *s, size_t n, const char *format, va_list arg){ return 0; } >> libobs/obs.c
       - name: Fetch Git Tags
         run: git fetch --prune --tags --unshallow
@@ -281,17 +272,17 @@ jobs:
           $env:FILE_NAME_X64="${{ env.PLUGIN_NAME }}-${{ github.sha }}-windows-x64"
           echo "FILE_NAME_X64=${env:FILE_NAME_X64}" >> ${env:GITHUB_ENV}
       - name: Retrieve x86 build
-        uses: actions/download-artifact@v4.1.7
+        uses: actions/download-artifact@v4.1.2
         with:
           name: '${{ env.FILE_NAME_X86 }}'
           path: ./package
       - name: Retrieve x64 build
-        uses: actions/download-artifact@v4.1.7
+        uses: actions/download-artifact@v4.1.2
         with:
           name: '${{ env.FILE_NAME_X64 }}'
           path: ./package
       - name: Retrieve installer files
-        uses: actions/download-artifact@v4.1.7
+        uses: actions/download-artifact@v4.1.2
         with:
           name: 'installer-files'
           path: .
@@ -301,10 +292,6 @@ jobs:
         with:
           name: '${{ env.FILE_NAME }}'
           path: package/*
-      - name: "Package Installer (Prereqs)"
-        run: |
-          curl "-kL" "https://files.jrsoftware.org/is/6/innosetup-6.0.3.exe" "-f" "--retry" "5" "-o" "inno.exe"
-          .\inno.exe /VERYSILENT /SP- /SUPPRESSMSGBOXES /NORESTART
       - name: "Package Installer (Compile)"
         run: |
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /Qp ".\installer.iss"
