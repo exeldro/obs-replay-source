@@ -1,0 +1,16 @@
+{
+    "display_name": "Replay Source",
+    "id": "6a088e26-5475-4872-a445-1b654e7a4e97",
+    "version": "1.8.2",
+    "authors": ["Exeldro"],
+    "name": "replay-source",
+    "description": "Instant (slow motion) replay sources from memory",
+    "long_description": "Instant (slow motion) replay sources from memory",
+    "urls": {
+        "repository": "https://github.com/exeldro/obs-replay-source",
+        "website": "https://obsproject.com/forum/resources/replay-source.686/",
+        "support": "https://obsproject.com/forum/threads/replay-source.86116/"
+    },
+    "has_banner": false,
+    "has_icon": false
+}
