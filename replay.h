@@ -13,8 +13,10 @@
 #define circlebuf_init deque_init
 #define circlebuf_free deque_free
 #define circlebuf_data deque_data
+typedef struct deque replay_queue;
 #else
 #include <util/circlebuf.h>
+typedef struct circlebuf replay_queue;
 #endif
 
 #ifdef __cplusplus
@@ -111,6 +113,11 @@ void replay_filter_check(void *data);
 #define SETTING_AUDIO_THRESHOLD_MAX 0.0f
 #define SETTING_LOAD_SWITCH_SCENE "load_switch_scene"
 #define SETTING_EXECUTE_ACTION "execute_action"
+#define SETTING_REPLAY_TYPES "replay_types"
+#define SETTING_REPLAY_TYPE_MAX "replay_type_max"
+#define SETTING_REPLAY_TYPE_SELECTED "replay_type_selected"
+#define SETTING_REPLAY_TYPE_NAME "replay_type_name"
+#define SETTING_REPLAY_TYPE_NEXT_ID "replay_type_next_id"
 
 #ifndef SEC_TO_NSEC
 #define SEC_TO_NSEC 1000000000ULL
