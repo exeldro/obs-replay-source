@@ -199,8 +199,13 @@ static void replay_filter_destroy(void *data)
 
 	obs_remove_main_render_callback(replay_filter_offscreen_render, filter);
 	pthread_mutex_lock(&filter->mutex);
-	video_output_close(filter->video_output);
+	video_t *vo = filter->video_output;
 	filter->video_output = NULL;
+	if (vo) {
+		pthread_mutex_unlock(&filter->mutex);
+		video_output_close(vo);
+		pthread_mutex_lock(&filter->mutex);
+	}
 
 	gs_stagesurface_unmap(filter->stagesurface);
 	gs_stagesurface_destroy(filter->stagesurface);
