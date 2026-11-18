@@ -62,9 +62,6 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)unpack]}) )) {
     git checkout ${obs_branch:-master} -b ${product_name}
     log_status 'obs-studio checked out.'
   }
-
-  git submodule foreach --recursive git submodule sync
-  git submodule update --init --recursive
 }
 
 if (( ! (${skips[(Ie)all]} + ${skips[(Ie)build]}) )) {

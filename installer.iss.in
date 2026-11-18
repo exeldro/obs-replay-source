@@ -40,7 +40,9 @@ SetupIconFile="media/icon.ico"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "package/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "package\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "package\obs-plugins\64bit\*"; DestDir: "{commonappdata}\obs-studio\plugins\@PROJECT_NAME@"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "package\data\obs-plugins\@PROJECT_NAME@\*"; DestDir: "{commonappdata}\obs-studio\plugins\@PROJECT_NAME@\data"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
