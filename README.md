@@ -16,6 +16,42 @@ Add a replay source.
 Set the source, duration and speed in the properties.
 Set the replay hotkey.
 
+## Named replay types
+
+A Replay Source can hold separate named clip queues, such as **Replay A** and
+**Replay B**, and play them through the same source.
+
+1. Open the Replay Source properties. In **Replay Types**, enter a name and
+   click **Add Type**. Repeat for each type.
+2. Open OBS **Settings > Hotkeys**, find the Replay Source, and assign these
+   three actions for each type:
+   - **Store Replay: Replay A** appends the current buffered period to A.
+   - **Play Replays: Replay A** plays A's clips in capture order, from the start.
+   - **Clear Replays: Replay A** clears A and cancels its pending captures.
+3. Use the corresponding Store, Play and Clear actions for Replay B.
+
+Store does not start playback, change scenes, drain the rolling capture buffer,
+or interrupt another replay. Play selects one type at a time and uses a snapshot
+of its queue; clips stored during playback appear the next time you press Play.
+Playing an empty type leaves playback unchanged. Clear stops playback only
+when that type is playing.
+
+**Maximum Clips Per Type** defaults to 10 (1–10). When full, the oldest stored
+clip in that type is removed; an ongoing playback snapshot can finish it.
+The source's duration, load delay, speed and audio/video settings apply to all
+types. For type playback, end actions apply to the whole queue. **Load Replay
+Switch Scene** runs when you press Play, and **Next Scene** runs after the queue
+finishes.
+
+Select a type to rename, reorder or remove it. Hotkey bindings follow its stable
+identity through rename, reorder and saved scene collections. Existing
+Next/Previous, trim, Remove and Clear controls act on the playing queue. The
+original Load Replay or audio trigger returns playback to the original queue.
+
+Clips live in RAM and disappear when the source is removed or OBS closes.
+Names and hotkeys are saved; exporting a clip to disk still uses **Save Replay**.
+Old scene collections keep their existing behavior and start with no types.
+
 # Replay source
 This source replays audio and video after it is retrieved from a replay filter by using the hotkey or the button in the properties.
 # (async) replay filter

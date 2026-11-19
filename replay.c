@@ -37,6 +37,7 @@ struct obs_audio_data *replay_filter_audio(void *data, struct obs_audio_data *au
 {
 	struct replay_filter *filter = data;
 	struct obs_audio_data cached = *audio;
+	pthread_mutex_lock(&filter->mutex);
 	bool threshold_trigger = !filter->trigger_threshold;
 	if (filter->oai.samples_per_sec == 0 || filter->oai.format != AUDIO_FORMAT_FLOAT_PLANAR) {
 		struct obs_audio_info oai;
@@ -71,8 +72,6 @@ struct obs_audio_data *replay_filter_audio(void *data, struct obs_audio_data *au
 		adjusted_time = os_time;
 	}
 	cached.timestamp = adjusted_time;
-
-	pthread_mutex_lock(&filter->mutex);
 
 	circlebuf_push_back(&filter->audio_frames, &cached, sizeof(cached));
 
@@ -139,6 +138,7 @@ void replay_filter_check(void *data)
 	filter->last_check = obs_get_video_frame_time();
 	obs_source_t *s = obs_get_source_by_name(obs_source_get_name(filter->src));
 	if (s) {
+		pthread_mutex_lock(&filter->mutex);
 		if (!filter->trigger_threshold) {
 			obs_data_t *settings = obs_source_get_settings(s);
 			if (obs_data_get_bool(settings, SETTING_SOUND_TRIGGER)) {
@@ -147,6 +147,7 @@ void replay_filter_check(void *data)
 			}
 			obs_data_release(settings);
 		}
+		pthread_mutex_unlock(&filter->mutex);
 		obs_source_release(s);
 	} else {
 		obs_source_filter_remove(obs_filter_get_parent(filter->src), filter->src);
